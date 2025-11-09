@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Envirnoment variables
+.env
+.env.local
+
+#IDE
+.vscode/
+.idea/
