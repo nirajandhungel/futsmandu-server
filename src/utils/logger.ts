@@ -29,3 +29,5 @@ if (config.env !=='production'){
         })
     );
 }
+
+export default logger;
