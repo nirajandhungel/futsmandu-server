@@ -1,7 +1,7 @@
-import {Request, Response, NextFunction} from 'express';
-import {HTTP_STATUS,ERROR_MESSAGES} from '../config/constants.ts';
-import logger from '../utils/logger.ts';
-import {createResponse} from '../utils/helpers.ts'
+import type {Request, Response, NextFunction} from 'express';
+import {HTTP_STATUS,ERROR_MESSAGES} from '../config/constants.js';
+import logger from '../utils/logger.js';
+import {createResponse} from '../utils/helpers.js'
 
 export class AppError extends Error{
     statusCode: number;
@@ -25,5 +25,5 @@ export const errorHandler=(
     next: NextFunction
 ):void=>{
     err.statusCode = err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR;
-    err.message = err.message || ERROR_MESSAGES.INTERNAL_SERVER_ERROR;
+    err.message = err.message || ERROR_MESSAGES.INTERNAL_ERROR;
 }
