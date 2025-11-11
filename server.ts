@@ -20,16 +20,16 @@ class Server{
             this.server = this.app.app.listen(config.port,()=>{
                 logger.info(`
 
-                            =========================================
+=========================================
 
-                                ${config.app.name} SERVER STARTED SUCCESSFULLY
-                                Environment: ${config.env.padEnd(25)}
-                                Port: ${config.port.toString().padEnd(32)}
-                                API Prefix: ${config.apiPrefix.padEnd(24)}
-                                Database: Connected ${config.env==='production'?'🔒':'🔧'.padEnd}
-                                Health Check: http://localhost:${config.port}/health
+    ${config.app.name} SERVER STARTED SUCCESSFULLY
+    Environment: ${config.env.padEnd(25)}
+    Port: ${config.port.toString().padEnd(32)}
+    API Prefix: ${config.apiPrefix.padEnd(24)}
+    Database: Connected ${config.env==='production'?'🔒':'🔧'.padEnd}
+    Health Check: http://localhost:${config.port}/health
 
-                            =========================================
+=========================================
                                 
                     `);
             });
