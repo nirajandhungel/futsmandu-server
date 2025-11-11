@@ -1,44 +1,51 @@
 {
-  // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
-    // File Layout
-    // "rootDir": "./src",
-    // "outDir": "./dist",
+    // Modern JS Output for Node 18+ (async/await, dynamic import, top-level await)
+    "target": "ES2020",
 
-    // Environment Settings
-    // See also https://aka.ms/tsconfig/module
-    "module": "nodenext",
-    "target": "esnext",
-    "types": [],
-    // For nodejs:
-    // "lib": ["esnext"],
-    // "types": ["node"],
-    // and npm install -D @types/node
+    // required when using Node.js ES Modules + "type": "module" in package.json
+    // ensures TS emits native .js ESM that node understands
+    "module": "NodeNext",
 
-    // Other Outputs
-    "sourceMap": true,
-    "declaration": true,
-    "declarationMap": true,
+    // must match module: NodeNext for proper resolution of ESM
+    // ensures correct resolution of .ts/.js/.mjs files in ESM mode
+    "moduleResolution": "NodeNext",
 
-    // Stricter Typechecking Options
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
 
-    // Style Options
-    // "noImplicitReturns": true,
-    // "noImplicitOverride": true,
-    // "noUnusedLocals": true,
-    // "noUnusedParameters": true,
-    // "noFallthroughCasesInSwitch": true,
-    // "noPropertyAccessFromIndexSignature": true,
+    // output directory for tranpiled JS files
+    "outDir": "dist",
 
-    // Recommended Options
-    "strict": true,
-    "jsx": "react-jsx",
-    "verbatimModuleSyntax": true,
+    // root of ur TS source files
+    "rootDir": "./",
+
+    //allows default import syntax even if modules are CommonJS
+    "esModuleInterop": true,
+
+    //enables importing .json files directly
+    "resolveJsonModule": true,
+
+    // forces each file to be treated as a module -required for ts-node ESM loader
     "isolatedModules": true,
-    "noUncheckedSideEffectImports": true,
-    "moduleDetection": "force",
+
+    // enables strict type checking -recommended for backend reliability 
+    "strict": true,
+
+    // skip type-checking libs for faster builds
     "skipLibCheck": true,
-  }
+
+    // allows case-sensitivity issues on Linux
+    "forceConsistentCasingInFileNames": true,
+
+    // allows `import x from "module"` even when typings expect different defaults
+    "allowSyntheticDefaultImports": true,
+
+    // generates source maps for easier debugging
+    "sourceMap": true
+  },
+
+  // include all TS files in the project
+  "include": ["**/*.ts"],
+
+  // exclude output and dependencies folders --node_modules
+  "exclude": ["dist", "node_modules"]
 }
