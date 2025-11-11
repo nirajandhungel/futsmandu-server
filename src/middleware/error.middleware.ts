@@ -26,4 +26,18 @@ export const errorHandler=(
 ):void=>{
     err.statusCode = err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR;
     err.message = err.message || ERROR_MESSAGES.INTERNAL_ERROR;
+    // log error 
+    logger.error('Error:',{
+        message:err.message,
+        stack:err.stack,
+        url:req.originalUrl,
+        method:req.method,
+    });
+
+     // Mongoose validation error
+  if (err.name === 'ValidationError') {
+    const errors = Object.values(err.errors).map((e: any) => e.message);
+    err.message = `Validation Error: ${errors.join(', ')}`;
+    err.statusCode = HTTP_STATUS.BAD_REQUEST;
+  }
 }
