@@ -12,15 +12,15 @@ export const APP_CONSTANTS={
 };
 
 export const HTTP_STATUS={
-    OK:'200',
-    CREATED:'201',
-    BAD_REQUEST:'400',
-    UNAUTHORIZED:'401',
-    FORBIDDEN:'403',
-    NOT_FOUND:'404',
-    CONFLICT:'409',
-    UNPROCESSABLE_ENTITY:'422',
-    INTERNAL_SERVER_ERROR:'500',
+    OK:200,
+    CREATED:201,
+    BAD_REQUEST:400,
+    UNAUTHORIZED:401,
+    FORBIDDEN:403,
+    NOT_FOUND:404,
+    CONFLICT:409,
+    UNPROCESSABLE_ENTITY:422,
+    INTERNAL_SERVER_ERROR:500,
 };
 
 export const ERROR_MESSAGES={
@@ -37,5 +37,6 @@ export const ERROR_MESSAGES={
     INSUFFICENT_SLOTS:"Not enough slots available",
     INTERNAL_ERROR:'An internal server error occurred',
     INVALID_TOKEN:'Invalid or expired token',
-    TOKEN_REQUIRED:'Authentication token required'
+    TOKEN_REQUIRED:'Authentication token required',
+    NOT_FOUND:'Resource not found'
 };
