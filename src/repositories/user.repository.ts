@@ -8,8 +8,17 @@ export class UserRepository extends BaseRepository<IUser>{
 
     // find user by email
     async findByEmail(email:string):Promise<IUser | null>{
-        return this.model.findOne({email}).select('+password +refreshToken');
+        return this.model.findOne({email}).select('+refreshToken');
     }
+
+    //find by email with password
+    async findByEmailWithPassword(email: string): Promise<IUser | null> {
+        return this.model.findOne({ email }).select('+password +refreshToken');
+    }
+
+
+
+
     // find user by email without sensitive fields
     async findByEmailPublic(email:string):Promise<IUser | null>{
         return this.model.findOne({email});
