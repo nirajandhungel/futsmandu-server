@@ -7,7 +7,7 @@ dotenv.config();
 const envSchema = Joi.object({
     NODE_ENV:Joi.string().valid('development', 'production','test').default('development'),
     PORT:Joi.number().default(5000),
-    API_PREFIX:Joi.string().default('/api/v2'),
+    API_PREFIX:Joi.string(),
     
     MONGO_URI:Joi.string().required(),
     JWT_SECRET:Joi.string().required(),
@@ -48,6 +48,7 @@ export const config={
         expiresIn:envVars.JWT_EXPIRES_IN,
         refreshSecret:envVars.JWT_REFRESH_SECRET,
         refreshExpiresIn:envVars.JWT_REFRESH_EXPIRES_IN,
+        issuer:envVars.JWT_ISSUER
     },
 
     email:{
