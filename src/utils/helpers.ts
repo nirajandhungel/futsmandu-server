@@ -5,6 +5,7 @@ export const createResponse = <T>(
     success:boolean,
     data?:T,
     message?:string,
+    statusCode?:number,
     pagination?:PaginationInfo
 
 ):ApiResponse<T>=>{
@@ -12,6 +13,7 @@ export const createResponse = <T>(
     const response:ApiResponse<T>={success};
     if(message) response.message=message;
     if(data!==undefined) response.data = data;
+    if(statusCode!==undefined) response.statusCode = statusCode;
     if(pagination)response.pagination = pagination;
     
     return response;
