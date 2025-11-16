@@ -12,6 +12,7 @@ export interface ICourtDocument extends Document {
   peakHourRate: number;
   images: string[];
   isActive: boolean;
+  isAvailable:boolean,
   maxPlayers: number;
   openingTime: string;
   closingTime: string;
@@ -94,6 +95,10 @@ const courtSchema = new Schema<ICourtDocument>({
   isActive: {
     type: Boolean,
     default: true
+  },
+  isAvailable:{
+    type:Boolean,
+    default:true,
   },
   maxPlayers: {
     type: Number,
