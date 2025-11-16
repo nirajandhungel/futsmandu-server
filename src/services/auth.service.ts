@@ -2,11 +2,12 @@ import jwt from 'jsonwebtoken';
 import { UserRepository } from '../repositories/user.repository.js';
 import { CreateUserDto, LoginDto, AuthTokens, JwtPayload } from '../types/user.types.js';
 import { config } from '../config/environment.js';
-import { HTTP_STATUS,ERROR_CODES, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../config/constants.js';
+import { ERROR_CODES, ERROR_MESSAGES } from '../config/constants.js';
 import { 
     AuthenticationError, 
     ConflictError,
-    AppError 
+    AppError,
+    ServiceUnavailableError
 } from '../middleware/error.middleware.js';
 import logger from '../utils/logger.js';
 
@@ -17,29 +18,43 @@ export class AuthService {
         this.userRepository = new UserRepository();
     }
 
-    // Register a new user
+    /**
+     * Register a new user
+     * @throws {ConflictError} If user already exists
+     * @throws {ValidationError} If user data is invalid
+     * @throws {AppError} For other registration failures
+     */
     async register(userData: CreateUserDto): Promise<{ user: any; tokens: AuthTokens }> {
         try {
             // Check if user already exists
             const existingUser = await this.userRepository.findByEmail(userData.email);
+            
             if (existingUser) {
-                throw new ConflictError(ERROR_CODES.USER_ALREADY_EXISTS, {
-                    email: userData.email,
-                    suggestion: 'Try logging in or use a different email address'
-                });
+                throw new ConflictError(
+                    ERROR_MESSAGES[ERROR_CODES.USER_ALREADY_EXISTS],
+                    ERROR_CODES.USER_ALREADY_EXISTS,
+                    {
+                        email: userData.email,
+                        suggestion: 'Please log in or use a different email address'
+                    }
+                );
             }
 
+            // Create new user
             const newUser = await this.userRepository.create(userData);
             
-            // Generate tokens
+            // Generate authentication tokens
             const tokens = this.generateTokens({
                 id: newUser._id.toString(),
                 email: newUser.email,
                 role: newUser.role,
             });
 
-            // Save refresh token 
-            await this.userRepository.updateRefreshToken(newUser._id.toString(), tokens.refreshToken);
+            // Save refresh token to database
+            await this.userRepository.updateRefreshToken(
+                newUser._id.toString(), 
+                tokens.refreshToken
+            );
             
             logger.info('User registered successfully', { 
                 userId: newUser._id, 
@@ -47,128 +62,83 @@ export class AuthService {
                 role: newUser.role 
             });
 
+            // Return sanitized user data with tokens
             return {
-                user: {
-                    id: newUser._id.toString(),
-                    email: newUser.email,
-                    role: newUser.role,
-                    fullName: newUser.fullName,
-                    isActive: newUser.isActive,
-                },
+                user: this.sanitizeUser(newUser),
                 tokens
             };
 
         } catch (error) {
+            // Log registration failure
             logger.error('User registration failed', { 
                 email: userData.email, 
-                error: error instanceof Error ? error.message : error 
+                error: error instanceof Error ? error.message : 'Unknown error'
             });
-            throw error;
-        }
-    }
-
-    // Login user
-    async login(credentials: LoginDto): Promise<{ user: any; tokens: AuthTokens }> {
-        try {
-            // Find user with password (you'll need to implement this method in repository)
-            const user = await this.userRepository.findByEmailWithPassword(credentials.email);
             
-            if (!user) {
-                throw new AuthenticationError(ERROR_CODES.AUTH_INVALID_CREDENTIALS, {
-                    email: credentials.email,
-                    suggestion: 'Check your email and password or reset your password'
-                });
-            }
-
-            // Check if user account is active
-            if (!user.isActive) {
-                throw new AuthenticationError(ERROR_CODES.AUTH_ACCOUNT_INACTIVE, {
-                    userId: user._id.toString(),
-                    email: user.email
-                });
-            }
-
-            // Validate password
-            const isPasswordValid = await user.comparePassword(credentials.password);
-            if (!isPasswordValid) {
-                throw new AuthenticationError(ERROR_CODES.AUTH_INVALID_CREDENTIALS, {
-                    email: credentials.email,
-                    failedAttempt: true
-                });
+            // Re-throw known errors
+            if (error instanceof AppError) {
+                throw error;
             }
             
-            // Generate tokens
-            const tokens = this.generateTokens({
-                id: user._id.toString(),
-                email: user.email,
-                role: user.role,
-            });
-
-            // Save refresh token
-            await this.userRepository.updateRefreshToken(user._id.toString(), tokens.refreshToken);
-            
-            logger.info('User logged in successfully', { 
-                userId: user._id, 
-                email: user.email 
-            });
-
-            return {
-                user: {
-                    id: user._id.toString(),
-                    email: user.email,
-                    role: user.role,
-                    fullName: user.fullName,
-                    isActive: user.isActive,
-                },
-                tokens
-            };
-
-        } catch (error) {
-            logger.warn('User login failed', { 
-                email: credentials.email, 
-                error: error instanceof Error ? error.message : error 
-            });
-            throw error;
-        }
-    }
-
-    // Logout user
-    async logout(userId: string): Promise<void> {
-        try {
-            await this.userRepository.updateRefreshToken(userId, null);
-            logger.info('User logged out successfully', { userId });
-        } catch (error) {
-            logger.error('User logout failed', { userId, error });
+            // Wrap unknown errors
             throw new AppError(
-                'Logout failed',
-                ERROR_CODES.INTERNAL_SERVER_ERROR,
-                HTTP_STATUS.INTERNAL_SERVER_ERROR
+                ERROR_MESSAGES[ERROR_CODES.USER_CREATION_FAILED],
+                500
             );
         }
     }
 
-    // Refresh access token
-    async refreshToken(refreshToken: string): Promise<AuthTokens> {
+    /**
+     * Authenticate user and generate tokens
+     * @throws {AuthenticationError} If credentials are invalid or account is inactive
+     */
+    async login(credentials: LoginDto): Promise<{ user: any; tokens: AuthTokens }> {
         try {
-            // Verify refresh token
-            const decoded = jwt.verify(refreshToken, config.jwt.refreshSecret) as JwtPayload;
+            // Find user with password field included
+            const user = await this.userRepository.findByEmailWithPassword(credentials.email);
             
-            // Find user with this refresh token (you'll need to implement this method)
-            const user = await this.userRepository.findByRefreshToken(refreshToken);
-
-            // If user not found or inactive
+            // Check if user exists
             if (!user) {
-                throw new AuthenticationError(ERROR_CODES.AUTH_TOKEN_INVALID, {
-                    reason: 'User not found for refresh token'
-                });
+                throw new AuthenticationError(
+                    ERROR_MESSAGES[ERROR_CODES.AUTH_INVALID_CREDENTIALS],
+                    ERROR_CODES.AUTH_INVALID_CREDENTIALS,
+                    { 
+                        suggestion: 'Please check your credentials or reset your password'
+                    }
+                );
             }
 
+            // Check if account is active
             if (!user.isActive) {
-                throw new AuthenticationError(ERROR_CODES.AUTH_ACCOUNT_INACTIVE, {
+                throw new AuthenticationError(
+                    ERROR_MESSAGES[ERROR_CODES.AUTH_ACCOUNT_INACTIVE],
+                    ERROR_CODES.AUTH_ACCOUNT_INACTIVE,
+                    {
+                        userId: user._id.toString(),
+                        suggestion: 'Please contact support to reactivate your account'
+                    }
+                );
+            }
+
+            // Validate password
+            const isPasswordValid = await user.comparePassword(credentials.password);
+            
+            if (!isPasswordValid) {
+                // Log failed attempt for security monitoring
+                logger.warn('Failed login attempt', { 
+                    email: credentials.email,
                     userId: user._id.toString()
                 });
+                
+                throw new AuthenticationError(
+                    ERROR_MESSAGES[ERROR_CODES.AUTH_INVALID_CREDENTIALS],
+                    ERROR_CODES.AUTH_INVALID_CREDENTIALS,
+                    {
+                        suggestion: 'Please check your credentials or reset your password'
+                    }
+                );
             }
-
+            
             // Generate new tokens
             const tokens = this.generateTokens({
                 id: user._id.toString(),
@@ -176,61 +146,244 @@ export class AuthService {
                 role: user.role,
             });
 
-            // Update refresh token
-            await this.userRepository.updateRefreshToken(user._id.toString(), tokens.refreshToken);
+            // Update refresh token in database
+            await this.userRepository.updateRefreshToken(
+                user._id.toString(), 
+                tokens.refreshToken
+            );
             
-            logger.debug('Token refreshed successfully', { userId: user._id });
+            logger.info('User logged in successfully', { 
+                userId: user._id, 
+                email: user.email 
+            });
+
+            return {
+                user: this.sanitizeUser(user),
+                tokens
+            };
+
+        } catch (error) {
+            logger.warn('User login failed', { 
+                email: credentials.email, 
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            
+            // Re-throw known errors
+            if (error instanceof AppError) {
+                throw error;
+            }
+            
+            // Wrap unknown errors as authentication errors
+            throw new AuthenticationError(
+                ERROR_MESSAGES[ERROR_CODES.AUTH_INVALID_CREDENTIALS],
+                ERROR_CODES.AUTH_INVALID_CREDENTIALS
+            );
+        }
+    }
+
+    /**
+     * Logout user by invalidating refresh token
+     * @throws {AppError} If logout fails
+     */
+    async logout(userId: string): Promise<void> {
+        try {
+            await this.userRepository.updateRefreshToken(userId, null);
+            
+            logger.info('User logged out successfully', { userId });
+        } catch (error) {
+            logger.error('User logout failed', { 
+                userId, 
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            
+            throw new AppError(
+                'Unable to logout. Please try again.',
+                500
+            );
+        }
+    }
+
+    /**
+     * Refresh access token using valid refresh token
+     * @throws {AuthenticationError} If refresh token is invalid or expired
+     */
+    async refreshToken(refreshToken: string): Promise<AuthTokens> {
+        try {
+            // Verify refresh token
+            const decoded = jwt.verify(
+                refreshToken, 
+                config.jwt.refreshSecret
+            ) as JwtPayload;
+            
+            // Find user by refresh token
+            const user = await this.userRepository.findByRefreshToken(refreshToken);
+
+            // Validate user exists
+            if (!user) {
+                throw new AuthenticationError(
+                    ERROR_MESSAGES[ERROR_CODES.AUTH_TOKEN_INVALID],
+                    ERROR_CODES.AUTH_TOKEN_INVALID,
+                    {
+                        reason: 'Token not found in database',
+                        suggestion: 'Please log in again'
+                    }
+                );
+            }
+
+            // Check if account is active
+            if (!user.isActive) {
+                throw new AuthenticationError(
+                    ERROR_MESSAGES[ERROR_CODES.AUTH_ACCOUNT_INACTIVE],
+                    ERROR_CODES.AUTH_ACCOUNT_INACTIVE,
+                    {
+                        userId: user._id.toString(),
+                        suggestion: 'Please contact support'
+                    }
+                );
+            }
+
+            // Generate new token pair
+            const tokens = this.generateTokens({
+                id: user._id.toString(),
+                email: user.email,
+                role: user.role,
+            });
+
+            // Update refresh token in database
+            await this.userRepository.updateRefreshToken(
+                user._id.toString(), 
+                tokens.refreshToken
+            );
+            
+            logger.debug('Access token refreshed successfully', { 
+                userId: user._id 
+            });
 
             return tokens;
 
         } catch (error) {
+            // Handle JWT specific errors
             if (error instanceof jwt.TokenExpiredError) {
-                throw new AuthenticationError(ERROR_CODES.AUTH_TOKEN_EXPIRED, {
-                    suggestion: 'Please log in again'
-                });
+                throw new AuthenticationError(
+                    ERROR_MESSAGES[ERROR_CODES.AUTH_TOKEN_EXPIRED],
+                    ERROR_CODES.AUTH_TOKEN_EXPIRED,
+                    {
+                        expiredAt: error.expiredAt,
+                        suggestion: 'Please log in again'
+                    }
+                );
             }
             
             if (error instanceof jwt.JsonWebTokenError) {
-                throw new AuthenticationError(ERROR_CODES.AUTH_TOKEN_INVALID, {
-                    reason: 'Invalid refresh token'
-                });
+                throw new AuthenticationError(
+                    ERROR_MESSAGES[ERROR_CODES.AUTH_TOKEN_INVALID],
+                    ERROR_CODES.AUTH_TOKEN_INVALID,
+                    {
+                        reason: error.message,
+                        suggestion: 'Please log in again'
+                    }
+                );
             }
 
-            logger.error('Token refresh failed', { error });
-            throw error; // Re-throw the error to be handled by the error middleware
+            logger.error('Token refresh failed', { 
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            
+            // Re-throw known errors
+            if (error instanceof AppError) {
+                throw error;
+            }
+            
+            // Wrap unknown errors
+            throw new AuthenticationError(
+                ERROR_MESSAGES[ERROR_CODES.AUTH_TOKEN_INVALID],
+                ERROR_CODES.AUTH_TOKEN_INVALID
+            );
         }
     }
     
-    // Generate access and refresh tokens
+    /**
+     * Generate access and refresh token pair
+     * @private
+     */
     private generateTokens(payload: JwtPayload): AuthTokens {
-        const accessToken = jwt.sign(payload, config.jwt.secret, {
-            expiresIn: config.jwt.expiresIn,
-            issuer: config.jwt.issuer,
-        });
+        const accessToken = jwt.sign(
+            payload, 
+            config.jwt.secret, 
+            {
+                expiresIn: config.jwt.expiresIn,
+                issuer: config.jwt.issuer,
+                // audience: config.jwt.audience,
+            }
+        );
 
-        const refreshToken = jwt.sign(payload, config.jwt.refreshSecret, {
-            expiresIn: config.jwt.refreshExpiresIn,
-            issuer: config.jwt.issuer,
-        });
+        const refreshToken = jwt.sign(
+            payload, 
+            config.jwt.refreshSecret, 
+            {
+                expiresIn: config.jwt.refreshExpiresIn,
+                issuer: config.jwt.issuer,
+                // audience: config.jwt.audience,
+            }
+        );
         
         return { accessToken, refreshToken };
     }
 
-    // Verify token
+    /**
+     * Verify and decode JWT token
+     * @throws {AuthenticationError} If token is invalid or expired
+     */
     verifyToken(token: string): JwtPayload {
         try {
-            const decoded = jwt.verify(token, config.jwt.secret) as JwtPayload;
+            const decoded = jwt.verify(
+                token, 
+                config.jwt.secret,
+                {
+                    issuer: config.jwt.issuer,
+                    // audience: config.jwt.audience,
+                }
+            ) as JwtPayload;
+            
             return decoded;
         } catch (error) {
             if (error instanceof jwt.TokenExpiredError) {
-                throw new AuthenticationError(ERROR_CODES.AUTH_TOKEN_EXPIRED);
+                throw new AuthenticationError(
+                    ERROR_MESSAGES[ERROR_CODES.AUTH_TOKEN_EXPIRED],
+                    ERROR_CODES.AUTH_TOKEN_EXPIRED,
+                    { expiredAt: error.expiredAt }
+                );
             }
             
             if (error instanceof jwt.JsonWebTokenError) {
-                throw new AuthenticationError(ERROR_CODES.AUTH_TOKEN_INVALID);
+                throw new AuthenticationError(
+                    ERROR_MESSAGES[ERROR_CODES.AUTH_TOKEN_INVALID],
+                    ERROR_CODES.AUTH_TOKEN_INVALID,
+                    { reason: error.message }
+                );
             }
             
-            throw new AuthenticationError(ERROR_CODES.AUTH_TOKEN_INVALID);
+            throw new AuthenticationError(
+                ERROR_MESSAGES[ERROR_CODES.AUTH_TOKEN_INVALID],
+                ERROR_CODES.AUTH_TOKEN_INVALID
+            );
         }
+    }
+
+    /**
+     * Remove sensitive data from user object
+     * @private
+     */
+    private sanitizeUser(user: any): any {
+        return {
+            id: user._id.toString(),
+            email: user.email,
+            role: user.role,
+            fullName: user.fullName,
+            isActive: user.isActive,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+            // Add other safe fields as needed
+        };
     }
 }
