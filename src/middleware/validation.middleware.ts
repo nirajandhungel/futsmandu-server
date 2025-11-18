@@ -22,7 +22,7 @@ export const validateRequest = (schema: Joi.ObjectSchema) => {
             }));
 
             throw new ValidationError(
-                ERROR_MESSAGES[ERROR_CODES.VALIDATION_ERROR],
+                ERROR_MESSAGES[ERROR_CODES.VALIDATION_FAILED],
                 { validationErrors: errorDetails }
             );
         }
