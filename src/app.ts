@@ -41,7 +41,8 @@ class App {
         //cors configuration
         this.app.use(
             cors({
-                origin:config.app.clientUrl,
+                origin:'*',
+                // origin:config.app.clientUrl,
                 methods:['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
                 credentials: true,
                 allowedHeaders:['Content-Type','Authorization','X-Requested-With'],
