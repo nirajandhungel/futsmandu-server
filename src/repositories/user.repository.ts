@@ -1,5 +1,6 @@
 import {User, IUser} from '../models/user.model.js';
 import {BaseRepository} from './base.repository.js';
+import { OwnerVerificationStatus, UserMode } from '../types/common.types.js';
 
 export class UserRepository extends BaseRepository<IUser>{
     constructor(){
@@ -56,5 +57,21 @@ export class UserRepository extends BaseRepository<IUser>{
     //get active users count by role
     async countByRole(role:string):Promise<number>{
         return this.count({role,isActive:true});
+    }
+
+    async updateMode(userId:string, mode:UserMode):Promise<IUser | null>{
+        return this.updateById(userId,{mode});
+    }
+
+    async updateOwnerProfile(userId:string, ownerProfile: Partial<IUser['ownerProfile']>):Promise<IUser | null>{
+        return this.updateById(userId,{
+            ownerProfile
+        });
+    }
+
+    async updateOwnerStatus(userId:string, status:OwnerVerificationStatus):Promise<IUser | null>{
+        return this.updateById(userId,{
+            'ownerProfile.status':status
+        });
     }
 }
