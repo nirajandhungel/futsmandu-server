@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { courtController, CourtController } from "../controllers/court.controller.js";
 import {authenticate, authorize} from '../middleware/auth.middleware.js';
-import { UserRole } from "../types/common.types.js";
+import { UserMode, UserRole } from "../types/common.types.js";
+import { requireMode } from "../middleware/mode.middleware.js";
 const router = Router();
 
 // public routes
@@ -24,24 +25,28 @@ router.get('/public/courts/courtId/availability',courtController.getCourtAvailab
 router.post('/futsal-courts/:futsalCourtId/courts', 
   authenticate, 
   authorize(UserRole.OWNER), 
+  requireMode([UserMode.OWNER]),
   courtController.createCourt
 );
 
 router.get('/owner/my-courts', 
   authenticate, 
   authorize(UserRole.OWNER), 
+  requireMode([UserMode.OWNER]),
   courtController.getOwnerCourts
 );
 
 router.put('/courts/:courtId', 
   authenticate, 
   authorize(UserRole.OWNER), 
+  requireMode([UserMode.OWNER]),
   courtController.updateCourt
 );
 
 router.delete('/courts/:courtId', 
   authenticate, 
   authorize(UserRole.OWNER), 
+  requireMode([UserMode.OWNER]),
   courtController.deleteCourt
 );
 
