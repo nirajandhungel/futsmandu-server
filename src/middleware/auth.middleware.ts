@@ -1,6 +1,6 @@
 import {Request , Response , NextFunction} from 'express';
 import {AuthService} from '../services/auth.service.js';
-import { UserRole } from '../types/common.types.js';
+import { UserMode, UserRole } from '../types/common.types.js';
 import { ERROR_MESSAGES, HTTP_STATUS } from '../config/constants.js';
 import { AppError } from './error.middleware.js';
 
@@ -21,10 +21,14 @@ export const authenticate = async (req:Request , res:Response , next:NextFunctio
 
         // attach user info to request object
 
+        const mode = (decoded.mode as UserMode) ?? (decoded.role === UserRole.OWNER ? UserMode.OWNER : UserMode.PLAYER);
+
         req.user = {
             id: decoded.id,
             email: decoded.email,
             role: decoded.role as UserRole,
+            mode,
+            ownerStatus: decoded.ownerStatus,
         };
         next();
     }catch(error){
