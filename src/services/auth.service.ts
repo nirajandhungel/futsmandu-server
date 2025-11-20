@@ -10,6 +10,8 @@ import {
     ServiceUnavailableError
 } from '../middleware/error.middleware.js';
 import logger from '../utils/logger.js';
+import type { IUser } from '../models/user.model.js';
+import { UserMode, UserRole } from '../types/common.types.js';
 
 export class AuthService {
     private userRepository: UserRepository;
@@ -41,14 +43,14 @@ export class AuthService {
             }
 
             // Create new user
-            const newUser = await this.userRepository.create(userData);
+            const payload = {
+                ...userData,
+                role: userData.role ?? UserRole.PLAYER,
+            };
+            const newUser = await this.userRepository.create(payload);
             
             // Generate authentication tokens
-            const tokens = this.generateTokens({
-                id: newUser._id.toString(),
-                email: newUser.email,
-                role: newUser.role,
-            });
+            const tokens = this.generateUserTokens(newUser);
 
             // Save refresh token to database
             await this.userRepository.updateRefreshToken(
@@ -64,7 +66,7 @@ export class AuthService {
 
             // Return sanitized user data with tokens
             return {
-                user: this.sanitizeUser(newUser),
+                user: this.toPublicUser(newUser),
                 tokens
             };
 
@@ -140,11 +142,7 @@ export class AuthService {
             }
             
             // Generate new tokens
-            const tokens = this.generateTokens({
-                id: user._id.toString(),
-                email: user.email,
-                role: user.role,
-            });
+            const tokens = this.generateUserTokens(user);
 
             // Update refresh token in database
             await this.userRepository.updateRefreshToken(
@@ -158,7 +156,7 @@ export class AuthService {
             });
 
             return {
-                user: this.sanitizeUser(user),
+                user: this.toPublicUser(user),
                 tokens
             };
 
@@ -243,11 +241,7 @@ export class AuthService {
             }
 
             // Generate new token pair
-            const tokens = this.generateTokens({
-                id: user._id.toString(),
-                email: user.email,
-                role: user.role,
-            });
+            const tokens = this.generateUserTokens(user);
 
             // Update refresh token in database
             await this.userRepository.updateRefreshToken(
@@ -374,16 +368,59 @@ export class AuthService {
      * Remove sensitive data from user object
      * @private
      */
-    private sanitizeUser(user: any): any {
+    private buildJwtPayload(user: IUser): JwtPayload {
+        const mode = this.resolveMode(user);
         return {
             id: user._id.toString(),
             email: user.email,
             role: user.role,
+            mode,
+            ownerStatus: user.ownerProfile?.status,
+        };
+    }
+
+    public generateUserTokens(user: IUser): AuthTokens {
+        return this.generateTokens(this.buildJwtPayload(user));
+    }
+
+    public toPublicUser(user: IUser): any {
+        const rawOwnerProfile = user.ownerProfile
+            ? typeof (user.ownerProfile as any).toObject === 'function'
+                ? (user.ownerProfile as any).toObject()
+                : user.ownerProfile
+            : undefined;
+
+        const ownerProfile = rawOwnerProfile
+            ? {
+                ...rawOwnerProfile,
+                additionalKyc: rawOwnerProfile.additionalKyc instanceof Map
+                    ? Object.fromEntries(rawOwnerProfile.additionalKyc)
+                    : rawOwnerProfile.additionalKyc,
+              }
+            : undefined;
+
+        const mode = this.resolveMode(user);
+
+        return {
+            id: user._id.toString(),
+            email: user.email,
+            role: user.role,
+            mode,
+            ownerStatus: user.ownerProfile?.status,
+            ownerProfile,
             fullName: user.fullName,
+            phoneNumber: user.phoneNumber,
+            profileImage: user.profileImage,
             isActive: user.isActive,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
-            // Add other safe fields as needed
         };
+    }
+
+    private resolveMode(user: IUser): UserMode {
+        if (user.mode) {
+            return user.mode;
+        }
+        return user.role === UserRole.OWNER ? UserMode.OWNER : UserMode.PLAYER;
     }
 }
