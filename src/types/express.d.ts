@@ -1,4 +1,4 @@
-import {UserRole} from './common.types.ts';
+import {UserRole, UserMode, OwnerVerificationStatus} from './common.types.js';
 declare global{
     namespace Express{
         interface Request{
@@ -6,7 +6,11 @@ declare global{
                 id:string;
                 email:string;
                 role:UserRole;
+                mode:UserMode;
+                ownerStatus?:OwnerVerificationStatus;
             };
         }
     }
 }
+
+export {};
