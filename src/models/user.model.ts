@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 import bcrypt from 'bcrypt';
-import { UserRole } from '../types/common.types.js';
+import { OwnerVerificationStatus, UserMode, UserRole } from '../types/common.types.js';
+import type { OwnerProfile } from '../types/user.types.js';
 
 export interface IUser extends Document {
     _id: Types.ObjectId;
@@ -9,9 +10,11 @@ export interface IUser extends Document {
     fullName: string;
     phoneNumber: string;
     role: UserRole;
+    mode: UserMode;
     profileImage?: string;
     isActive: boolean;
-    refreshToken?: string;
+    refreshToken?: string | null;
+    ownerProfile?: OwnerProfile;
     createdAt: Date;
     updatedAt: Date;
     comparePassword(candidatePassword: string): Promise<boolean>;
@@ -48,11 +51,35 @@ const UserSchema = new Schema<IUser>(
             enum: Object.values(UserRole), 
             default: UserRole.PLAYER 
         },
+        mode: {
+            type: String,
+            enum: Object.values(UserMode),
+            default: UserMode.PLAYER,
+        },
+        ownerProfile: {
+            profilePhotoUrl: { type: String },
+            citizenshipFrontUrl: { type: String },
+            citizenshipBackUrl: { type: String },
+            panNumber: { type: String, trim: true },
+            address: { type: String, trim: true },
+            additionalKyc: {
+                type: Map,
+                of: String,
+                default: undefined,
+            },
+            status: {
+                type: String,
+                enum: Object.values(OwnerVerificationStatus),
+                default: OwnerVerificationStatus.DRAFT,
+            },
+            lastSubmittedAt: { type: Date },
+        },
         profileImage: { type: String },
         isActive: { 
             type: Boolean,
             default: true
         },
+        refreshToken: { type: String, select: false },
 
     }, { timestamps: true }
 );
