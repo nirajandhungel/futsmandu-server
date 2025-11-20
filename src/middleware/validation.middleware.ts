@@ -9,7 +9,7 @@ import { ERROR_CODES, ERROR_MESSAGES } from '../config/constants.js';
 // Validate request body against Joi schema
 export const validateRequest = (schema: Joi.ObjectSchema) => {
     return (req: Request, res: Response, next: NextFunction): void => {
-        const { error } = schema.validate(req.body, {
+        const { error, value } = schema.validate(req.body, {
             abortEarly: false,
             stripUnknown: true
         });
@@ -26,6 +26,7 @@ export const validateRequest = (schema: Joi.ObjectSchema) => {
                 { validationErrors: errorDetails }
             );
         }
+        req.body = value;
         next();
     };
 };
@@ -62,10 +63,7 @@ export const validationSchemas = {
                 'string.empty': 'Phone number is required',
                 'any.required': 'Phone number is required'
             }),
-        role: Joi.string().valid('PLAYER', 'OWNER').required().messages({
-            'any.only': 'Role must be either PLAYER or OWNER',
-            'any.required': 'Role is required'
-        }),
+        role: Joi.string().valid('PLAYER', 'OWNER').default('PLAYER')
     }),
 
     login: Joi.object({
@@ -109,5 +107,33 @@ export const validationSchemas = {
         startTime: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
         endTime: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
         playerCount: Joi.number().min(1).max(20).required()
-    })
+    }),
+
+    ownerActivate: Joi.object({
+        panNumber: Joi.string().trim().max(20).required().messages({
+            'string.empty': 'PAN number is required',
+        }),
+        address: Joi.string().trim().min(5).max(200).required().messages({
+            'string.min': 'Address must be at least 5 characters',
+            'string.empty': 'Address is required',
+        }),
+        additionalKyc: Joi.alternatives().try(
+            Joi.object().pattern(Joi.string(), Joi.string().allow('').max(255)),
+            Joi.string().custom((value, helpers) => {
+                try {
+                    const parsed = JSON.parse(value);
+                    if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+                        return helpers.error('any.invalid');
+                    }
+                    return parsed;
+                } catch (error) {
+                    return helpers.error('any.invalid');
+                }
+            })
+        ).optional()
+    }),
+
+    ownerDeactivate: Joi.object({
+        reason: Joi.string().max(255).optional(),
+    }),
 };
