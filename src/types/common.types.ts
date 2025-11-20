@@ -4,6 +4,19 @@ export enum UserRole{
     ADMIN = 'ADMIN'
 }
 
+export enum UserMode{
+    PLAYER = 'PLAYER',
+    OWNER = 'OWNER',
+}
+
+export enum OwnerVerificationStatus{
+    DRAFT = 'DRAFT',
+    PENDING = 'PENDING',
+    APPROVED = 'APPROVED',
+    REJECTED = 'REJECTED',
+    INACTIVE = 'INACTIVE'
+}
+
 export enum BookingStatus {
     PENDING = 'PENDING',
     CONFIRMED= 'CONFIRMED',
