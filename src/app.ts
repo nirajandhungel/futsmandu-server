@@ -15,6 +15,7 @@ import {generalLimiter} from './middleware/rateLimit.middleware.js';
 
 import authRoutes from './routes/auth.routes.js';
 import courtRoutes from './routes/court.routes.js';
+import ownerRoutes from './routes/owner.routes.js';
 import { databaseConnection } from './config/database.js';
 // import futsalRoutes from './routes/futsal.routes.js';
 // import bookingRoutes from './routes/booking.routes.js';
@@ -98,6 +99,7 @@ class App {
         // API Routes 
         this.app.use(`${config.apiPrefix}/auth`,authRoutes);
         this.app.use(`${config.apiPrefix}/courts`,courtRoutes);
+        this.app.use(`${config.apiPrefix}/owner`, ownerRoutes);
         // this.app.use(`${config.apiPrefix}/bookings`,bookingRoutes);
         // this.app.use(`${config.apiPrefix}/users`,userRoutes);
 
