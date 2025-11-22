@@ -136,4 +136,29 @@ export const validationSchemas = {
     ownerDeactivate: Joi.object({
         reason: Joi.string().max(255).optional(),
     }),
+
+    // Admin schemas
+    approveOwnerRequest: Joi.object({
+        status: Joi.string().valid('APPROVED', 'REJECTED').required().messages({
+            'any.only': 'Status must be either APPROVED or REJECTED',
+            'any.required': 'Status is required'
+        }),
+        remarks: Joi.string().max(500).optional()
+    }),
+
+    updateOwnerStatus: Joi.object({
+        status: Joi.string().valid('PENDING', 'APPROVED', 'REJECTED', 'INACTIVE', 'DRAFT').required().messages({
+            'any.only': 'Status must be one of: PENDING, APPROVED, REJECTED, INACTIVE, DRAFT',
+            'any.required': 'Status is required'
+        }),
+        remarks: Joi.string().max(500).optional()
+    }),
+
+    updateUserStatus: Joi.object({
+        isActive: Joi.boolean().required().messages({
+            'boolean.base': 'isActive must be a boolean',
+            'any.required': 'isActive is required'
+        }),
+        reason: Joi.string().max(500).optional()
+    }),
 };
