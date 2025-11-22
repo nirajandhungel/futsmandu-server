@@ -195,6 +195,11 @@ export const ERROR_MESSAGES: Record<string, string> = {
     [ERROR_CODES.RESOURCE_NOT_FOUND]: 'The requested resource was not found.',
     [ERROR_CODES.RESOURCE_ALREADY_EXISTS]: 'This resource already exists.',
     [ERROR_CODES.RESOURCE_CONFLICT]: 'A conflict occurred with the current state of the resource.',
+    
+    // Direct error message properties (for backward compatibility with auth middleware)
+    TOKEN_REQUIRED: 'Authentication token is required.',
+    UNAUTHORIZED: 'Unauthorized access. Please log in to continue.',
+    FORBIDDEN: 'Access forbidden. You do not have permission to perform this action.',
 };
 
 /**
