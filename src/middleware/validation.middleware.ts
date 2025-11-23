@@ -100,6 +100,70 @@ export const validationSchemas = {
         })
     }),
 
+    // Futsal court creation schema (for owner)
+    createFutsalCourt: Joi.object({
+        name: Joi.string().min(2).max(100).required().messages({
+            'string.min': 'Name must be at least 2 characters',
+            'string.max': 'Name must be at most 100 characters',
+            'string.empty': 'Name is required',
+            'any.required': 'Name is required'
+        }),
+        description: Joi.string().min(10).max(1000).required().messages({
+            'string.min': 'Description must be at least 10 characters',
+            'string.max': 'Description must be at most 1000 characters',
+            'string.empty': 'Description is required',
+            'any.required': 'Description is required'
+        }),
+        location: Joi.object({
+            address: Joi.string().min(5).max(200).required(),
+            city: Joi.string().min(2).max(100).required(),
+            state: Joi.string().max(100).optional(),
+            coordinates: Joi.object({
+                latitude: Joi.number().min(-90).max(90).required(),
+                longitude: Joi.number().min(-180).max(180).required()
+            }).optional()
+        }).required(),
+        contact: Joi.object({
+            phone: Joi.string().pattern(/^[0-9]{10}$/).required().messages({
+                'string.pattern.base': 'Phone number must be exactly 10 digits'
+            }),
+            email: Joi.string().email().optional(),
+            website: Joi.string().uri().optional()
+        }).required(),
+        amenities: Joi.array().items(Joi.string()).optional(),
+        openingHours: Joi.object({
+            monday: Joi.object({
+                open: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
+                close: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required()
+            }).required(),
+            tuesday: Joi.object({
+                open: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
+                close: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required()
+            }).required(),
+            wednesday: Joi.object({
+                open: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
+                close: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required()
+            }).required(),
+            thursday: Joi.object({
+                open: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
+                close: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required()
+            }).required(),
+            friday: Joi.object({
+                open: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
+                close: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required()
+            }).required(),
+            saturday: Joi.object({
+                open: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
+                close: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required()
+            }).required(),
+            sunday: Joi.object({
+                open: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
+                close: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required()
+            }).required()
+        }).required()
+        // Note: images are uploaded via multer, not in JSON body
+    }),
+
     // Booking creation schema
     createBooking: Joi.object({
         courtId: Joi.string().hex().length(24).required(),
