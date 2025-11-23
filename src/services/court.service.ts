@@ -99,6 +99,51 @@ export class CourtService {
   }
 
   /**
+   * Create a new futsal court (venue)
+   * @throws {ConflictError} If futsal court name already exists for owner
+   */
+  async createFutsalCourt(
+    futsalCourtData: any,
+    ownerId: string
+  ): Promise<FutsalCourt> {
+    // Check if futsal court with same name already exists for this owner
+    const exists = await this.futsalCourtRepository.futsalCourtExistsByName(
+      futsalCourtData.name,
+      ownerId
+    );
+
+    if (exists) {
+      throw new ConflictError(
+        ERROR_MESSAGES[ERROR_CODES.RESOURCE_ALREADY_EXISTS],
+        ERROR_CODES.RESOURCE_ALREADY_EXISTS,
+        {
+          field: 'name',
+          value: futsalCourtData.name,
+          message: 'A futsal court with this name already exists'
+        }
+      );
+    }
+
+    // Create the futsal court
+    const futsalCourt = await this.futsalCourtRepository.createFutsalCourt({
+      ...futsalCourtData,
+      ownerId,
+      isVerified: false,
+      isActive: true,
+      rating: 0,
+      totalReviews: 0
+    });
+
+    logger.info('Futsal court created successfully', {
+      futsalCourtId: futsalCourt.id,
+      ownerId,
+      name: futsalCourt.name
+    });
+
+    return futsalCourt;
+  }
+
+  /**
    * Get all courts and futsal venues owned by a user
    */
   async getOwnerCourts(ownerId: string): Promise<{ 
