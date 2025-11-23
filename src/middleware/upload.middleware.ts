@@ -26,3 +26,13 @@ export const ownerDocumentsUpload = multer({
     { name: 'citizenshipBack', maxCount: 1 },
 ]);
 
+// Futsal court images upload (multiple images)
+export const futsalCourtImagesUpload = multer({
+    storage,
+    fileFilter,
+    limits: {
+        fileSize: 5 * 1024 * 1024, // 5 MB per file
+        files: 10, // Maximum 10 images
+    },
+}).array('images', 10);
+
