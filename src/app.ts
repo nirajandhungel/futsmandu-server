@@ -17,10 +17,10 @@ import authRoutes from './routes/auth.routes.js';
 import courtRoutes from './routes/court.routes.js';
 import ownerRoutes from './routes/owner.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import bookingRoutes from './routes/booking.routes.js';
+import userRoutes from './routes/user.routes.js';
+import matchRoutes from './routes/match.routes.js';
 import { databaseConnection } from './config/database.js';
-// import futsalRoutes from './routes/futsal.routes.js';
-// import bookingRoutes from './routes/booking.routes.js';
-// import userRoutes from './routes/user.routes.js';
 
 class App {
     public app:Application;
@@ -102,8 +102,9 @@ class App {
         this.app.use(`${config.apiPrefix}/courts`,courtRoutes);
         this.app.use(`${config.apiPrefix}/owner`, ownerRoutes);
         this.app.use(`${config.apiPrefix}/admin`, adminRoutes);
-        // this.app.use(`${config.apiPrefix}/bookings`,bookingRoutes);
-        // this.app.use(`${config.apiPrefix}/users`,userRoutes);
+        this.app.use(`${config.apiPrefix}/bookings`,bookingRoutes);
+        this.app.use(`${config.apiPrefix}/users`,userRoutes);
+        this.app.use(`${config.apiPrefix}/matches`,matchRoutes);
 
 
         //Root endpoint
