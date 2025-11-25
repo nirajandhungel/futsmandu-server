@@ -323,6 +323,15 @@ DELETE /api/courts/:id             - Delete court (Owner only)
 GET    /api/courts/search          - Search courts with filters
 ```
 
+#### Discovery & Availability (Public)
+```
+GET    /api/v1/courts/public/courts                   - Fetch active courts with filters
+GET    /api/v1/courts/public/futsal-courts/:id        - Retrieve futsal venue details
+GET    /api/v1/courts/public/futsal-courts/:id/courts - List courts for a venue
+GET    /api/v1/courts/public/courts/:id               - Get single court details
+GET    /api/v1/courts/public/courts/:id/availability  - Check availability for a day
+```
+
 ### Booking Routes
 ```
 GET    /api/bookings               - List all bookings (Admin)
