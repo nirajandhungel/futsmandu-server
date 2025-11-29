@@ -7,11 +7,17 @@ import { ERROR_CODES, ERROR_MESSAGES } from '../config/constants.js';
 
 //validate request body against Joi schema
 // Validate request body against Joi schema
+// Handles FormData arrays by converting them before validation
 export const validateRequest = (schema: Joi.ObjectSchema) => {
     return (req: Request, res: Response, next: NextFunction): void => {
-        const { error, value } = schema.validate(req.body, {
+        // Normalize FormData arrays before validation
+        // FormData sends arrays as multiple fields with same name or as comma-separated strings
+        const normalizedBody = normalizeFormDataArrays(req.body);
+        
+        const { error, value } = schema.validate(normalizedBody, {
             abortEarly: false,
-            stripUnknown: true
+            stripUnknown: true,
+            allowUnknown: false
         });
 
         if (error) {
@@ -30,6 +36,55 @@ export const validateRequest = (schema: Joi.ObjectSchema) => {
         next();
     };
 };
+
+/**
+ * Normalize FormData arrays - ensures arrays are properly formatted
+ * Handles cases where FormData sends arrays as strings or multiple fields
+ */
+function normalizeFormDataArrays(body: any): any {
+    if (!body || typeof body !== 'object') {
+        return body;
+    }
+
+    const normalized: any = { ...body };
+
+    // Handle amenities array (can be string, array, or comma-separated)
+    if (normalized.amenities !== undefined) {
+        if (typeof normalized.amenities === 'string') {
+            normalized.amenities = normalized.amenities
+                .split(',')
+                .map((a: string) => a.trim())
+                .filter((a: string) => a.length > 0);
+        } else if (!Array.isArray(normalized.amenities)) {
+            normalized.amenities = [normalized.amenities];
+        }
+    }
+
+    // Handle courts array and their nested amenities
+    if (normalized.courts && Array.isArray(normalized.courts)) {
+        normalized.courts = normalized.courts.map((court: any) => {
+            const normalizedCourt = { ...court };
+            
+            // Normalize court amenities
+            if (normalizedCourt.amenities !== undefined) {
+                if (typeof normalizedCourt.amenities === 'string') {
+                    normalizedCourt.amenities = normalizedCourt.amenities
+                        .split(',')
+                        .map((a: string) => a.trim())
+                        .filter((a: string) => a.length > 0);
+                } else if (!Array.isArray(normalizedCourt.amenities)) {
+                    normalizedCourt.amenities = normalizedCourt.amenities ? [normalizedCourt.amenities] : [];
+                }
+            } else {
+                normalizedCourt.amenities = [];
+            }
+            
+            return normalizedCourt;
+        });
+    }
+
+    return normalized;
+}
 
 // Define validation schemas with enhanced messages
 export const validationSchemas = {
@@ -100,7 +155,7 @@ export const validationSchemas = {
         })
     }),
 
-    // Futsal court creation schema (for owner)
+    // Futsal court creation schema (for owner) - Simplified with smart defaults
     createFutsalCourt: Joi.object({
         name: Joi.string().min(2).max(100).required().messages({
             'string.min': 'Name must be at least 2 characters',
@@ -119,8 +174,8 @@ export const validationSchemas = {
             city: Joi.string().min(2).max(100).required(),
             state: Joi.string().max(100).optional(),
             coordinates: Joi.object({
-                latitude: Joi.number().min(-90).max(90).required(),
-                longitude: Joi.number().min(-180).max(180).required()
+                latitude: Joi.number().min(-90).max(90).optional(),
+                longitude: Joi.number().min(-180).max(180).optional()
             }).optional()
         }).required(),
         contact: Joi.object({
@@ -160,19 +215,57 @@ export const validationSchemas = {
                 open: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
                 close: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required()
             }).required()
-        }).required()
+        }).required(),
+        // Courts array - simplified with only essential fields required
+        courts: Joi.array().items(
+            Joi.object({
+                courtNumber: Joi.string().required().messages({
+                    'string.empty': 'Court number is required',
+                    'any.required': 'Court number is required'
+                }),
+                name: Joi.string().min(2).max(100).required().messages({
+                    'string.min': 'Court name must be at least 2 characters',
+                    'string.max': 'Court name must be at most 100 characters',
+                    'string.empty': 'Court name is required',
+                    'any.required': 'Court name is required'
+                }),
+                size: Joi.string().valid('5v5', '6v6', '7v7').required().messages({
+                    'any.only': 'Court size must be 5v5, 6v6, or 7v7',
+                    'any.required': 'Court size is required'
+                }),
+                hourlyRate: Joi.number().min(0).required().messages({
+                    'number.min': 'Hourly rate must be 0 or greater',
+                    'any.required': 'Hourly rate is required'
+                }),
+                // Optional fields with smart defaults
+                maxPlayers: Joi.number().min(10).max(14).optional(),
+                openingTime: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
+                closingTime: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
+                peakHourRate: Joi.number().min(0).optional(),
+                isActive: Joi.boolean().optional(),
+                isAvailable: Joi.boolean().optional(),
+                amenities: Joi.array().items(Joi.string()).optional()
+            })
+        ).min(1).required().messages({
+            'array.min': 'At least one court is required',
+            'any.required': 'Courts array is required'
+        })
         // Note: images are uploaded via multer, not in JSON body
     }),
 
     // Booking creation schema
+
     createBooking: Joi.object({
         courtId: Joi.string().hex().length(24).required(),
         date: Joi.date().iso().min('now').required(),
         startTime: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
         endTime: Joi.string().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).required(),
-        playerCount: Joi.number().min(1).max(20).required()
+        bookingType: Joi.string().valid('PARTIAL_TEAM', 'FULL_TEAM').required(), // Add this
+        groupType: Joi.string().valid('public', 'private').optional(),
+        maxPlayers: Joi.number().min(1).max(20).optional() // Change playerCount to maxPlayers
     }),
 
+    
     ownerActivate: Joi.object({
         panNumber: Joi.string().trim().max(20).required().messages({
             'string.empty': 'PAN number is required',
@@ -194,7 +287,9 @@ export const validationSchemas = {
                     return helpers.error('any.invalid');
                 }
             })
-        ).optional()
+        ).optional().messages({
+            'any.invalid': 'additionalKyc must be a valid JSON object'
+        })
     }),
 
     ownerDeactivate: Joi.object({
