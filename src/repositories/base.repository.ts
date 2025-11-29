@@ -1,31 +1,37 @@
-import {Model, Document, FilterQuery, UpdateQuery, QueryOptions} from 'mongoose';
+import {Model, Document, FilterQuery, UpdateQuery, QueryOptions, ClientSession} from 'mongoose';
 
 // BaseRepository providing generic CRUD operations
 export class BaseRepository<T extends Document> {
     constructor(protected model: Model<T>) {}
 
     // Create a new document
-    async create(data: Partial<T>): Promise<T> {
+    async create(data: Partial<T>, session?: ClientSession): Promise<T> {
+        if (session) {
+            return this.model.create([data], { session }).then(docs => docs[0]);
+        }
         return this.model.create(data);
     }
     // Find a document by ID
-    async findById(id: string, select?: string): Promise<T | null> {
+    async findById(id: string, select?: string, session?: ClientSession): Promise<T | null> {
         const query = this.model.findById(id);
         if (select) query.select(select);
+        if (session) query.session(session);
         return query.exec();
     }
 
     // Find a single document by filter
-    async findOne(filter: FilterQuery<T>, select?: string): Promise<T | null> {
+    async findOne(filter: FilterQuery<T>, select?: string, session?: ClientSession): Promise<T | null> {
         const query = this.model.findOne(filter);
         if (select) query.select(select);
+        if (session) query.session(session);
         return query.exec();
     }
 
     // Find multiple documents by filter
-    async find(filter: FilterQuery<T> ={}, select?: string): Promise<T[]> {
+    async find(filter: FilterQuery<T> ={}, select?: string, session?: ClientSession): Promise<T[]> {
         const query = this.model.find(filter);
         if (select) query.select(select);
+        if (session) query.session(session);
         return query.exec();
     }
 
@@ -33,12 +39,11 @@ export class BaseRepository<T extends Document> {
     async updateById(
         id: string, 
         update: UpdateQuery<T>, 
-        options?: QueryOptions): Promise<T | null> {
+        options?: QueryOptions & { session?: ClientSession }): Promise<T | null> {
         return this.model.findByIdAndUpdate(id, update, { 
             new: true,
             runValidators: true,
             ...options });
-
     }
 
     // update a document
