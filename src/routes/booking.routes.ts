@@ -7,15 +7,21 @@ import {
   leaveBooking,
   invitePlayers,
   getMyBookings,
-  getBookingById
+  getBookingById,
+  getJoinableBookings
 } from '../controllers/booking.controller.js';
 
 const router = Router();
 
-// All booking routes require authentication
+// ==================== PUBLIC ROUTES ====================
+// Get joinable bookings (for solo players looking to join groups)
+router.get('/joinable', getJoinableBookings);
+
+// ==================== AUTHENTICATED ROUTES ====================
+// All booking routes below require authentication
 router.use(authenticate);
 
-// Create booking
+// Create a new booking
 router.post(
   '/',
   validateRequest(validationSchemas.createBooking || {}), // Add validation schema later
@@ -25,9 +31,6 @@ router.post(
 // Get user's bookings
 router.get('/my', getMyBookings);
 
-// Get booking by ID
-router.get('/:id', getBookingById);
-
 // Join a booking
 router.post('/:id/join', joinBooking);
 
@@ -36,6 +39,9 @@ router.post('/:id/leave', leaveBooking);
 
 // Invite players to booking
 router.post('/:id/invite', invitePlayers);
+
+// Get booking by ID
+router.get('/:id', getBookingById);
 
 export default router;
 
