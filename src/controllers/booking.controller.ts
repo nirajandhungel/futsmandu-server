@@ -2,11 +2,12 @@ import { Request, Response, NextFunction } from 'express';
 import { BookingService } from '../services/booking.service.js';
 import { HTTP_STATUS, SUCCESS_MESSAGES, ERROR_CODES, ERROR_MESSAGES } from '../config/constants.js';
 import { asyncHandler } from '../middleware/error.middleware.js';
-import { createResponse } from '../utils/helpers.js';
+import { sendSuccess } from '../utils/responseHandler.js';
 import {
   CreateBookingRequest,
   JoinBookingRequest,
-  InvitePlayersRequest
+  InvitePlayersRequest,
+  BookingSearchQuery
 } from '../types/booking.types.js';
 import logger from '../utils/logger.js';
 
@@ -28,16 +29,16 @@ export const createBooking = asyncHandler(async (
 
   logger.info('Booking created successfully', {
     bookingId: booking.id,
-    userId
+    userId,
+    courtId: bookingData.courtId,
+    bookingType: bookingData.bookingType
   });
 
-  res.status(HTTP_STATUS.CREATED).json(
-    createResponse(
-      true,
-      { booking },
-      SUCCESS_MESSAGES.BOOKING_CREATED,
-      HTTP_STATUS.CREATED
-    )
+  sendSuccess(
+    res,
+    { booking },
+    SUCCESS_MESSAGES.BOOKING_CREATED || 'Booking created successfully',
+    HTTP_STATUS.CREATED
   );
 });
 
@@ -58,18 +59,17 @@ export const joinBooking = asyncHandler(async (
   logger.info('Player joined booking', {
     bookingId,
     userId,
-    autoConfirmed: result.autoConfirmed
+    autoConfirmed: result.autoConfirmed,
+    currentPlayers: result.booking.players?.filter((p: any) => p.status === 'active').length || 0
   });
 
-  res.status(HTTP_STATUS.OK).json(
-    createResponse(
-      true,
-      result,
-      result.autoConfirmed 
-        ? 'Booking joined and auto-confirmed (full)' 
-        : SUCCESS_MESSAGES.BOOKING_JOINED,
-      HTTP_STATUS.OK
-    )
+  sendSuccess(
+    res,
+    result,
+    result.autoConfirmed 
+      ? 'Booking joined and auto-confirmed (group is now full)' 
+      : (SUCCESS_MESSAGES.BOOKING_JOINED || 'Successfully joined the booking'),
+    HTTP_STATUS.OK
   );
 });
 
@@ -89,13 +89,11 @@ export const leaveBooking = asyncHandler(async (
 
   logger.info('Player left booking', { bookingId, userId });
 
-  res.status(HTTP_STATUS.OK).json(
-    createResponse(
-      true,
-      { booking },
-      'Successfully left the booking',
-      HTTP_STATUS.OK
-    )
+  sendSuccess(
+    res,
+    { booking },
+    'Successfully left the booking',
+    HTTP_STATUS.OK
   );
 });
 
@@ -129,13 +127,11 @@ export const invitePlayers = asyncHandler(async (
     invitedCount: userIds.length
   });
 
-  res.status(HTTP_STATUS.OK).json(
-    createResponse(
-      true,
-      { booking },
-      'Invitations sent successfully',
-      HTTP_STATUS.OK
-    )
+  sendSuccess(
+    res,
+    { booking },
+    'Invitations sent successfully',
+    HTTP_STATUS.OK
   );
 });
 
@@ -149,17 +145,21 @@ export const getMyBookings = asyncHandler(async (
   next: NextFunction
 ): Promise<void> => {
   const userId = req.user!.id;
-  const query = req.query;
+  const query = req.query as BookingSearchQuery;
 
-  const bookings = await bookingService.getMyBookings(userId, query as any);
+  const bookings = await bookingService.getMyBookings(userId, query);
 
-  res.status(HTTP_STATUS.OK).json(
-    createResponse(
-      true,
-      { bookings, count: bookings.length },
-      'Bookings retrieved successfully',
-      HTTP_STATUS.OK
-    )
+  logger.debug('User bookings retrieved', {
+    userId,
+    count: bookings.length,
+    filters: query
+  });
+
+  sendSuccess(
+    res,
+    { bookings, count: bookings.length },
+    'Bookings retrieved successfully',
+    HTTP_STATUS.OK
   );
 });
 
@@ -167,22 +167,78 @@ export const getMyBookings = asyncHandler(async (
  * Get public group matches
  * GET /api/matches/groups
  */
+/**
+ * Get public group matches with filtering and sorting
+ * GET /api/matches/groups
+ * Query params: date, courtId, futsalCourtId, minPlayers, maxPlayers, availableSlots, 
+ *               sortBy (players|date|time|createdAt), sortOrder (asc|desc)
+ */
 export const getPublicGroupMatches = asyncHandler(async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  const query = req.query;
+  const query = req.query as BookingSearchQuery;
 
-  const result = await bookingService.getPublicGroupMatches(query as any);
+  // Parse numeric query parameters
+  if (query.minPlayers) query.minPlayers = Number(query.minPlayers);
+  if (query.maxPlayers) query.maxPlayers = Number(query.maxPlayers);
+  if (query.availableSlots) query.availableSlots = Number(query.availableSlots);
+  if (query.page) query.page = Number(query.page);
+  if (query.limit) query.limit = Number(query.limit);
 
-  res.status(HTTP_STATUS.OK).json(
-    createResponse(
-      true,
-      result,
-      'Group matches retrieved successfully',
-      HTTP_STATUS.OK
-    )
+  const result = await bookingService.getPublicGroupMatches(query);
+
+  logger.debug('Public group matches retrieved', {
+    count: result.groups.length,
+    filters: query
+  });
+
+  sendSuccess(
+    res,
+    result,
+    'Group matches retrieved successfully',
+    HTTP_STATUS.OK
+  );
+});
+
+/**
+ * Get joinable bookings for solo players (sorted by available slots)
+ * GET /api/bookings/joinable
+ * Returns bookings that need more players, sorted by available slots
+ */
+export const getJoinableBookings = asyncHandler(async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const query = req.query as BookingSearchQuery;
+
+  // Parse numeric query parameters
+  if (query.minPlayers) query.minPlayers = Number(query.minPlayers);
+  if (query.maxPlayers) query.maxPlayers = Number(query.maxPlayers);
+  if (query.availableSlots) query.availableSlots = Number(query.availableSlots);
+  if (query.page) query.page = Number(query.page);
+  if (query.limit) query.limit = Number(query.limit);
+
+  // Default to sorting by available slots (descending) for solo players
+  if (!query.sortBy) {
+    query.sortBy = 'players';
+    query.sortOrder = 'desc';
+  }
+
+  const result = await bookingService.getJoinableBookings(query);
+
+  logger.debug('Joinable bookings retrieved', {
+    count: result.groups.length,
+    filters: query
+  });
+
+  sendSuccess(
+    res,
+    result,
+    'Joinable bookings retrieved successfully',
+    HTTP_STATUS.OK
   );
 });
 
@@ -200,15 +256,19 @@ export const joinGroupMatch = asyncHandler(async (
 
   const result = await bookingService.joinBooking(userId, groupId);
 
-  res.status(HTTP_STATUS.OK).json(
-    createResponse(
-      true,
-      result,
-      result.autoConfirmed 
-        ? 'Group joined and booking auto-confirmed (full)' 
-        : 'Successfully joined the group',
-      HTTP_STATUS.OK
-    )
+  logger.info('Player joined group match', {
+    groupId,
+    userId,
+    autoConfirmed: result.autoConfirmed
+  });
+
+  sendSuccess(
+    res,
+    result,
+    result.autoConfirmed 
+      ? 'Group joined and booking auto-confirmed (group is now full)' 
+      : 'Successfully joined the group',
+    HTTP_STATUS.OK
   );
 });
 
@@ -225,13 +285,13 @@ export const getBookingById = asyncHandler(async (
 
   const booking = await bookingService.getBookingWithDetails(bookingId);
 
-  res.status(HTTP_STATUS.OK).json(
-    createResponse(
-      true,
-      { booking },
-      'Booking retrieved successfully',
-      HTTP_STATUS.OK
-    )
+  logger.debug('Booking details retrieved', { bookingId });
+
+  sendSuccess(
+    res,
+    { booking },
+    'Booking retrieved successfully',
+    HTTP_STATUS.OK
   );
 });
 
