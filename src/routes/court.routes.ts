@@ -1,39 +1,37 @@
 import { Router } from "express";
-import { courtController, CourtController } from "../controllers/court.controller.js";
+import { courtController } from "../controllers/court.controller.js";
 import {authenticate, authorize} from '../middleware/auth.middleware.js';
 import { UserMode, UserRole } from "../types/common.types.js";
 import { requireMode } from "../middleware/mode.middleware.js";
 const router = Router();
 
-// public routes
+// ==================== PUBLIC ROUTES ====================
 
-//search operations
+// Search operations
+router.get('/public/venues/search', courtController.searchVenues);
+router.get('/public/courts/search', courtController.searchCourts);
 
-router.get('/public/futsal-courts/search',courtController.searchFutsalCourts);
-router.get('/public/courts/search',courtController.searchCourts);
-
-//get opeartions
-router.get('/public/futsal-courts/:futsalCourtId',courtController.getFutsalCourtById);
-router.get('/public/futsal-courts/:futsalCourtId/courts',courtController.getFutsalCourtWithCourts);
-router.get('/public/courts/:courtId',courtController.getCourtById)
-router.get('/public/courts/courtId/availability',courtController.getCourtAvailability);
-
-//owner routes
+// Get operations
+router.get('/public/venues', courtController.getAllVenues);
+router.get('/public/venues/:venueId', courtController.getVenueById);
+router.get('/public/venues/:venueId/courts', courtController.getVenueWithCourts);
+router.get('/public/courts/:courtId', courtController.getCourtById);
+router.get('/public/courts/:courtId/availability', courtController.getCourtAvailability);
 
 // ==================== OWNER ROUTES ====================
 
-router.post('/futsal-courts/:futsalCourtId/courts', 
+router.post('/venues/:venueId/courts', 
   authenticate, 
   authorize(UserRole.OWNER), 
   requireMode([UserMode.OWNER]),
-  courtController.createCourt
+  courtController.addCourtToVenue
 );
 
-router.get('/owner/my-courts', 
+router.get('/owner/my-venues', 
   authenticate, 
   authorize(UserRole.OWNER), 
   requireMode([UserMode.OWNER]),
-  courtController.getOwnerCourts
+  courtController.getOwnerVenues
 );
 
 router.put('/courts/:courtId', 
@@ -52,28 +50,28 @@ router.delete('/courts/:courtId',
 
 // ==================== ADMIN ROUTES ====================
 
-router.get('/admin/futsal-courts', 
+router.get('/admin/venues', 
   authenticate, 
   authorize(UserRole.ADMIN), 
-  courtController.getAllFutsalCourts
+  courtController.getAllVenues
 );
 
-router.patch('/admin/futsal-courts/:futsalCourtId/verify', 
+router.patch('/admin/venues/:venueId/verify', 
   authenticate, 
   authorize(UserRole.ADMIN), 
-  courtController.verifyFutsalCourt
+  courtController.verifyVenue
 );
 
-router.patch('/admin/futsal-courts/:futsalCourtId/suspend', 
+router.patch('/admin/venues/:venueId/suspend', 
   authenticate, 
   authorize(UserRole.ADMIN), 
-  courtController.suspendFutsalCourt
+  courtController.suspendVenue
 );
 
-router.patch('/admin/futsal-courts/:futsalCourtId/activate', 
+router.patch('/admin/venues/:venueId/activate', 
   authenticate, 
   authorize(UserRole.ADMIN), 
-  courtController.activateFutsalCourt
+  courtController.activateVenue
 );
 
 export default router;
