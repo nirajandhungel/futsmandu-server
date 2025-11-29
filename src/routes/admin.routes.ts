@@ -11,10 +11,10 @@ import {
     getUserById,
     updateUserStatus,
     deleteUser,
-    getAllFutsalCourts,
-    verifyFutsalCourt,
-    suspendFutsalCourt,
-    reactivateFutsalCourt
+    getAllVenues,
+    verifyVenue,
+    suspendVenue,
+    reactivateVenue
 } from '../controllers/admin.controller.js';
 
 const router = Router();
@@ -37,11 +37,11 @@ router.get('/users/:userId', getUserById);
 router.patch('/users/:userId/status', validateRequest(validationSchemas.updateUserStatus), updateUserStatus);
 router.delete('/users/:userId', deleteUser);
 
-// ==================== FUTSAL COURT MANAGEMENT ====================
-router.get('/futsal-courts', getAllFutsalCourts);
-router.patch('/futsal-courts/:futsalCourtId/verify', verifyFutsalCourt);
-router.patch('/futsal-courts/:futsalCourtId/suspend', suspendFutsalCourt);
-router.patch('/futsal-courts/:futsalCourtId/reactivate', reactivateFutsalCourt);
+// ==================== VENUE MANAGEMENT ====================
+router.get('/venues', getAllVenues);
+router.patch('/venues/:venueId/verify', verifyVenue);
+router.patch('/venues/:venueId/suspend', suspendVenue);
+router.patch('/venues/:venueId/reactivate', reactivateVenue);
 
 export default router;
 
