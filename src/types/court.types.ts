@@ -1,9 +1,8 @@
 /**
- * Type definitions for Court-related entities
+ * Type definitions for Court and Venue entities
  */
 
 // ==================== ENUMS ====================
-
 export enum CourtSize {
   FIVE_VS_FIVE = '5v5',
   SIX_VS_SIX = '6v6',
@@ -16,12 +15,11 @@ export enum CourtStatus {
   MAINTENANCE = 'maintenance'
 }
 
-// ==================== COURT INTERFACES ====================
-
+// ==================== COURT INTERFACE ====================
 export interface Court {
   id?: string;
   _id?: string;
-  futsalCourtId: string;
+  venueId: string;
   courtNumber: string;
   name: string;
   size: CourtSize | string;
@@ -30,7 +28,7 @@ export interface Court {
   peakHourRate?: number;
   images: string[];
   isActive: boolean;
-  isAvailable: boolean; 
+  isAvailable: boolean;
   maxPlayers: number;
   openingTime: string;
   closingTime: string;
@@ -38,7 +36,8 @@ export interface Court {
   updatedAt?: Date;
 }
 
-export interface FutsalCourt {
+// ==================== VENUE INTERFACE ====================
+export interface FutsalVenue {
   id?: string;
   _id?: string;
   ownerId: string;
@@ -59,7 +58,7 @@ export interface FutsalCourt {
     website?: string;
   };
   amenities: string[];
-   openingHours: {
+  openingHours: {
     monday: { open: string; close: string };
     tuesday: { open: string; close: string };
     wednesday: { open: string; close: string };
@@ -68,7 +67,6 @@ export interface FutsalCourt {
     saturday: { open: string; close: string };
     sunday: { open: string; close: string };
   };
-
   images: string[];
   isVerified: boolean;
   isActive: boolean;
@@ -81,18 +79,18 @@ export interface FutsalCourt {
 // ==================== REQUEST DTOs ====================
 
 export interface CreateCourtRequest {
-  courtNumber: string;
-  name: string;
-  size: CourtSize | string;
-  amenities?: string[];
-  hourlyRate: number;
-  peakHourRate?: number;
-  images?: string[];
-  maxPlayers: number;
-  openingTime: string;
-  closingTime: string;
-  isActive?: boolean;
-  isAvailable: boolean; 
+  courtNumber: string;        // Required
+  name: string;              // Required  
+  size: CourtSize | string;  // Required
+  hourlyRate: number;        // Required
+  amenities?: string[];      // Optional (default: [])
+  maxPlayers?: number;       // Optional (auto-calculate: 5v5=10, 6v6=12, 7v7=14)
+  openingTime?: string;      // Optional (inherit from venue)
+  closingTime?: string;      // Optional (inherit from venue)
+  peakHourRate?: number;     // Optional (auto-calculate: hourlyRate * 1.25)
+  isActive?: boolean;        // Optional (default: true)
+  isAvailable?: boolean;     // Optional (default: true)
+  images?: string[];         // For uploaded court images
 }
 
 export interface UpdateCourtRequest {
@@ -107,10 +105,10 @@ export interface UpdateCourtRequest {
   openingTime?: string;
   closingTime?: string;
   isActive?: boolean;
-  isAvailable: boolean; 
+  isAvailable?: boolean;
 }
 
-export interface CreateFutsalCourtRequest {
+export interface CreateFutsalVenueRequest {
   name: string;
   description: string;
   location: {
@@ -128,7 +126,7 @@ export interface CreateFutsalCourtRequest {
     website?: string;
   };
   amenities?: string[];
-     openingHours: {
+  openingHours: {
     monday: { open: string; close: string };
     tuesday: { open: string; close: string };
     wednesday: { open: string; close: string };
@@ -137,11 +135,11 @@ export interface CreateFutsalCourtRequest {
     saturday: { open: string; close: string };
     sunday: { open: string; close: string };
   };
-
   images?: string[];
+  courts: CreateCourtRequest[]; // At least one court required (must be 5v5 or 6v6)
 }
 
-export interface UpdateFutsalCourtRequest {
+export interface UpdateFutsalVenueRequest {
   name?: string;
   description?: string;
   location?: {
@@ -159,7 +157,7 @@ export interface UpdateFutsalCourtRequest {
     website?: string;
   };
   amenities?: string[];
-   openingHours: {
+  openingHours?: {
     monday: { open: string; close: string };
     tuesday: { open: string; close: string };
     wednesday: { open: string; close: string };
@@ -174,24 +172,23 @@ export interface UpdateFutsalCourtRequest {
 // ==================== SEARCH & FILTER ====================
 
 export interface CourtSearchQuery {
-  futsalCourtId?: string;
+  venueId?: string;
   size?: CourtSize | string;
   minRate?: number;
   maxRate?: number;
   isActive?: boolean;
+  isAvailable?: boolean;
   minPlayers?: number;
   maxPlayers?: number;
 }
 
-export interface FutsalCourtSearchQuery {
+export interface VenueSearchQuery {
   name?: string;
   city?: string;
   amenities?: string[];
   minRating?: number;
   isVerified?: boolean;
   isActive?: boolean;
-  
-  // Coordinates for location-based search
   latitude?: number;
   longitude?: number;
   radius?: number; // in kilometers
@@ -219,20 +216,20 @@ export interface TimeSlot {
 
 // ==================== RESPONSE DTOs ====================
 
-export interface CourtWithFutsalCourt extends Court {
-  futsalCourt?: FutsalCourt;
+export interface CourtWithVenue extends Court {
+  venue?: FutsalVenue;
 }
 
-export interface FutsalCourtWithCourts extends FutsalCourt {
+export interface FutsalVenueWithCourts extends FutsalVenue {
   courts?: Court[];
   totalCourts?: number;
   activeCourts?: number;
 }
 
-export interface OwnerCourtsResponse {
-  futsalCourts: FutsalCourt[];
+export interface OwnerVenuesResponse {
+  venues: FutsalVenue[];
   courts: Court[];
-  totalFutsalCourts: number;
+  totalVenues: number;
   totalCourts: number;
 }
 
@@ -247,8 +244,8 @@ export interface CourtStatistics {
   peakHours: string[];
 }
 
-export interface FutsalCourtStatistics {
-  futsalCourtId: string;
+export interface VenueStatistics {
+  venueId: string;
   totalCourts: number;
   totalBookings: number;
   totalRevenue: number;
@@ -271,7 +268,7 @@ export interface CourtValidationError {
 // ==================== FILTERS ====================
 
 export interface CourtFilters {
-  futsalCourtId?: string;
+  venueId?: string;
   size?: CourtSize | string;
   minRate?: number;
   maxRate?: number;
@@ -283,7 +280,7 @@ export interface CourtFilters {
   limit?: number;
 }
 
-export interface FutsalCourtFilters {
+export interface VenueFilters {
   city?: string;
   isVerified?: boolean;
   isActive?: boolean;
@@ -309,8 +306,8 @@ export interface PaginatedCourts {
   };
 }
 
-export interface PaginatedFutsalCourts {
-  futsalCourts: FutsalCourt[];
+export interface PaginatedVenues {
+  venues: FutsalVenue[];
   pagination: {
     currentPage: number;
     totalPages: number;
