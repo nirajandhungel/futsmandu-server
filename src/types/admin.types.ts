@@ -48,10 +48,10 @@ export interface AdminDashboardStats {
     pendingOwnerRequests: number;
     approvedOwners: number;
     rejectedOwners: number;
-    totalFutsalCourts: number;
-    verifiedFutsalCourts: number;
-    pendingFutsalCourts: number;
-    activeFutsalCourts: number;
-    suspendedFutsalCourts: number;
+    totalVenues: number;
+    verifiedVenues: number;
+    pendingVenues: number;
+    activeVenues: number;
+    suspendedVenues: number;
 }
 
