@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware.js';
-import { ownerDocumentsUpload, futsalCourtImagesUpload } from '../middleware/upload.middleware.js';
+import { ownerDocumentsUpload, futsalCourtImagesUpload, venueCreationUpload } from '../middleware/upload.middleware.js';
 import { validateRequest, validationSchemas } from '../middleware/validation.middleware.js';
 import { 
   activateOwnerMode, 
   deactivateOwnerMode, 
   getOwnerProfile,
-  createFutsalCourt,
+  createVenue,
   getDashboard,
   approveBooking,
   rejectBooking
@@ -22,7 +22,7 @@ router.post(
   authenticate,
   requireMode([UserMode.PLAYER]),
   ownerDocumentsUpload,
-  validateRequest(validationSchemas.ownerActivate),
+  // validateRequest(validationSchemas.ownerActivate),
   activateOwnerMode
 );
 
@@ -34,13 +34,14 @@ router.use(authorize(UserRole.OWNER));
 // Get owner profile
 router.get('/profile', getOwnerProfile);
 
-// Create futsal court (venue)
+// Create venue with courts (at least one 5v5 or 6v6 court required)
+// Uses FormData with simplified court structure
 router.post(
-  '/courts',
+  '/venues',
   requireMode([UserMode.OWNER]),
-  futsalCourtImagesUpload, // Handle image uploads
+  venueCreationUpload, // Handle venue and court image uploads
   validateRequest(validationSchemas.createFutsalCourt),
-  createFutsalCourt
+  createVenue
 );
 
 // Get dashboard analytics
