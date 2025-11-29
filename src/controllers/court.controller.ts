@@ -2,27 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import { CourtService } from '../services/court.service.js';
 import { HTTP_STATUS, SUCCESS_MESSAGES, ERROR_CODES, ERROR_MESSAGES } from '../config/constants.js';
 import { asyncHandler, ValidationError } from '../middleware/error.middleware.js';
-import { CreateCourtRequest, UpdateCourtRequest } from '../types/court.types.js';
+import { CreateCourtRequest, UpdateCourtRequest, CourtSearchQuery } from '../types/court.types.js';
 import logger from '../utils/logger.js';
-
-/**
- * Standardized success response helper
- */
-const sendSuccess = <T = any>(
-  res: Response,
-  data: T,
-  message: string,
-  statusCode: number = HTTP_STATUS.OK
-): Response => {
-  return res.status(statusCode).json({
-    success: true,
-    message,
-    data,
-    meta: {
-      timestamp: new Date().toISOString()
-    }
-  });
-};
+import { sendSuccess } from '../utils/responseHandler.js';
 
 export class CourtController {
   private courtService: CourtService;
@@ -34,24 +16,24 @@ export class CourtController {
   // ==================== COURT OPERATIONS (Owner) ====================
 
   /**
-   * Create a new court within a futsal venue
-   * POST /api/courts/:futsalCourtId/courts
+   * Add a new court to an existing venue
+   * POST /api/venues/:venueId/courts
    * @access Owner
    */
-  createCourt = asyncHandler(async (
+  addCourtToVenue = asyncHandler(async (
     req: Request,
     res: Response,
     next: NextFunction
   ): Promise<void> => {
     const courtData: CreateCourtRequest = req.body;
-    const { futsalCourtId } = req.params;
+    const { venueId } = req.params;
     const ownerId = req.user!.id;
 
-    const court = await this.courtService.createCourt(courtData, futsalCourtId, ownerId);
+    const court = await this.courtService.addCourtToVenue(courtData, venueId, ownerId);
 
-    logger.info('Court created successfully', {
+    logger.info('Court added to venue successfully', {
       courtId: court.id,
-      futsalCourtId,
+      venueId,
       ownerId,
       courtNumber: court.courtNumber
     });
@@ -65,23 +47,23 @@ export class CourtController {
   });
 
   /**
-   * Get all courts and futsal venues owned by the authenticated user
-   * GET /api/courts/owner/my-courts
+   * Get all venues and courts owned by the authenticated user
+   * GET /api/courts/owner/my-venues
    * @access Owner
    */
-  getOwnerCourts = asyncHandler(async (
+  getOwnerVenues = asyncHandler(async (
     req: Request,
     res: Response,
     next: NextFunction
   ): Promise<void> => {
     const ownerId = req.user!.id;
 
-    const result = await this.courtService.getOwnerCourts(ownerId);
+    const result = await this.courtService.getOwnerVenues(ownerId);
 
     sendSuccess(
       res,
       result,
-      'Owner courts retrieved successfully',
+      'Owner venues and courts retrieved successfully',
       HTTP_STATUS.OK
     );
   });
@@ -141,107 +123,107 @@ export class CourtController {
     );
   });
 
-  // ==================== FUTSAL COURT OPERATIONS (Admin) ====================
+  // ==================== VENUE OPERATIONS (Admin) ====================
 
   /**
-   * Get all futsal courts with optional filters
-   * GET /api/admin/futsal-courts
+   * Get all venues with optional filters
+   * GET /api/admin/venues
    * @access Admin
    */
-  getAllFutsalCourts = asyncHandler(async (
+  getAllVenues = asyncHandler(async (
     req: Request,
     res: Response,
     next: NextFunction
   ): Promise<void> => {
     const filter = req.query;
 
-    const futsalCourts = await this.courtService.getAllFutsalCourts(filter);
+    const venues = await this.courtService.getAllVenues(filter);
 
     sendSuccess(
       res,
-      { futsalCourts, count: futsalCourts.length },
-      'Futsal courts retrieved successfully',
+      { venues, count: venues.length },
+      'Venues retrieved successfully',
       HTTP_STATUS.OK
     );
   });
 
   /**
-   * Verify a futsal court
-   * PATCH /api/admin/futsal-courts/:futsalCourtId/verify
+   * Verify a venue
+   * PATCH /api/admin/venues/:venueId/verify
    * @access Admin
    */
-  verifyFutsalCourt = asyncHandler(async (
+  verifyVenue = asyncHandler(async (
     req: Request,
     res: Response,
     next: NextFunction
   ): Promise<void> => {
-    const { futsalCourtId } = req.params;
+    const { venueId } = req.params;
 
-    const futsalCourt = await this.courtService.verifyFutsalCourt(futsalCourtId);
+    const venue = await this.courtService.verifyVenue(venueId);
 
-    logger.info('Futsal court verified', {
-      futsalCourtId,
+    logger.info('Venue verified', {
+      venueId,
       adminId: req.user!.id
     });
 
     sendSuccess(
       res,
-      { futsalCourt },
-      'Futsal court verified successfully',
+      { venue },
+      'Venue verified successfully',
       HTTP_STATUS.OK
     );
   });
 
   /**
-   * Suspend a futsal court
-   * PATCH /api/admin/futsal-courts/:futsalCourtId/suspend
+   * Suspend a venue
+   * PATCH /api/admin/venues/:venueId/suspend
    * @access Admin
    */
-  suspendFutsalCourt = asyncHandler(async (
+  suspendVenue = asyncHandler(async (
     req: Request,
     res: Response,
     next: NextFunction
   ): Promise<void> => {
-    const { futsalCourtId } = req.params;
+    const { venueId } = req.params;
 
-    const futsalCourt = await this.courtService.suspendFutsalCourt(futsalCourtId);
+    const venue = await this.courtService.suspendVenue(venueId);
 
-    logger.warn('Futsal court suspended', {
-      futsalCourtId,
+    logger.warn('Venue suspended', {
+      venueId,
       adminId: req.user!.id
     });
 
     sendSuccess(
       res,
-      { futsalCourt },
-      'Futsal court suspended successfully',
+      { venue },
+      'Venue suspended successfully',
       HTTP_STATUS.OK
     );
   });
 
   /**
-   * Activate a futsal court
-   * PATCH /api/admin/futsal-courts/:futsalCourtId/activate
+   * Activate a venue
+   * PATCH /api/admin/venues/:venueId/activate
    * @access Admin
    */
-  activateFutsalCourt = asyncHandler(async (
+  activateVenue = asyncHandler(async (
     req: Request,
     res: Response,
     next: NextFunction
   ): Promise<void> => {
-    const { futsalCourtId } = req.params;
+    const { venueId } = req.params;
 
-    const futsalCourt = await this.courtService.activateFutsalCourt(futsalCourtId);
+    const venue = await this.courtService.activateVenue(venueId);
 
-    logger.info('Futsal court activated', {
-      futsalCourtId,
+    logger.info('Venue activated', {
+      venueId,
       adminId: req.user!.id
     });
 
     sendSuccess(
       res,
-      { futsalCourt },
-      'Futsal court activated successfully',
+      { venue },
+      'Venue activated successfully',
       HTTP_STATUS.OK
     );
   });
@@ -249,67 +231,67 @@ export class CourtController {
   // ==================== PUBLIC OPERATIONS ====================
 
   /**
-   * Search futsal courts with filters
-   * GET /api/public/futsal-courts/search
+   * Search venues with filters
+   * GET /api/public/venues/search
    * @access Public
    */
-  searchFutsalCourts = asyncHandler(async (
+  searchVenues = asyncHandler(async (
     req: Request,
     res: Response,
     next: NextFunction
   ): Promise<void> => {
-    const query = req.query;
+    const query = req.query as any;
 
-    const futsalCourts = await this.courtService.searchFutsalCourts(query);
+    const venues = await this.courtService.searchVenues(query);
 
     sendSuccess(
       res,
-      { futsalCourts, count: futsalCourts.length },
+      { venues, count: venues.length },
       'Search completed successfully',
       HTTP_STATUS.OK
     );
   });
 
   /**
-   * Get futsal court details by ID
-   * GET /api/public/futsal-courts/:futsalCourtId
+   * Get venue details by ID
+   * GET /api/public/venues/:venueId
    * @access Public
    */
-  getFutsalCourtById = asyncHandler(async (
+  getVenueById = asyncHandler(async (
     req: Request,
     res: Response,
     next: NextFunction
   ): Promise<void> => {
-    const { futsalCourtId } = req.params;
+    const { venueId } = req.params;
 
-    const futsalCourt = await this.courtService.getFutsalCourtById(futsalCourtId);
+    const venue = await this.courtService.getVenueById(venueId);
 
     sendSuccess(
       res,
-      { futsalCourt },
-      'Futsal court details retrieved successfully',
+      { venue },
+      'Venue details retrieved successfully',
       HTTP_STATUS.OK
     );
   });
 
   /**
-   * Get futsal court with all its courts
-   * GET /api/public/futsal-courts/:futsalCourtId/courts
+   * Get venue with all its courts
+   * GET /api/public/venues/:venueId/courts
    * @access Public
    */
-  getFutsalCourtWithCourts = asyncHandler(async (
+  getVenueWithCourts = asyncHandler(async (
     req: Request,
     res: Response,
     next: NextFunction
   ): Promise<void> => {
-    const { futsalCourtId } = req.params;
+    const { venueId } = req.params;
 
-    const result = await this.courtService.getFutsalCourtWithCourts(futsalCourtId);
+    const result = await this.courtService.getVenueWithCourts(venueId);
 
     sendSuccess(
       res,
       result,
-      'Futsal court and courts retrieved successfully',
+      'Venue and courts retrieved successfully',
       HTTP_STATUS.OK
     );
   });
@@ -380,7 +362,7 @@ export class CourtController {
     res: Response,
     next: NextFunction
   ): Promise<void> => {
-    const query = req.query;
+    const query = req.query as CourtSearchQuery;
 
     const courts = await this.courtService.searchCourts(query);
 
@@ -388,6 +370,28 @@ export class CourtController {
       res,
       { courts, count: courts.length },
       'Court search completed successfully',
+      HTTP_STATUS.OK
+    );
+  });
+
+  /**
+   * Get all public courts (active & available)
+   * GET /api/public/courts
+   * @access Public
+   */
+  getPublicCourts = asyncHandler(async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    const query = req.query as CourtSearchQuery;
+
+    const result = await this.courtService.getPublicCourts(query);
+
+    sendSuccess(
+      res,
+      result,
+      'Courts retrieved successfully',
       HTTP_STATUS.OK
     );
   });
