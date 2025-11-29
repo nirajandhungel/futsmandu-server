@@ -4,7 +4,7 @@ import { AuthService } from './auth.service.js';
 import { CourtService } from './court.service.js';
 import { BookingRepository } from '../repositories/booking.repository.js';
 import { OwnerActivationDto, OwnerDocumentsUpload, ModeSwitchResponse } from '../types/user.types.js';
-import { CreateFutsalCourtRequest } from '../types/court.types.js';
+import { CreateFutsalVenueRequest } from '../types/court.types.js';
 import { NotFoundError, ValidationError } from '../middleware/error.middleware.js';
 import { uploadImageBuffer } from '../utils/cloudinary.js';
 import { config } from '../config/environment.js';
@@ -24,6 +24,8 @@ export class OwnerService {
         this.bookingRepository = new BookingRepository();
     }
 
+    
+
     async activateOwnerMode(
         userId: string,
         payload: OwnerActivationDto,
@@ -33,6 +35,11 @@ export class OwnerService {
         if (!user) {
             throw new NotFoundError('User');
         }
+
+    // Add null checks for payload
+    if (!payload) {
+        throw new ValidationError('Payload is required');
+    }
 
         const profilePhoto = this.pickFile(files, 'profilePhoto');
         const citizenshipFront = this.pickFile(files, 'citizenshipFront');
@@ -46,7 +53,7 @@ export class OwnerService {
             uploadImageBuffer(citizenshipBack, { folder, publicId: 'citizenship-back' }),
         ]);
 
-        const additionalKyc = this.normalizeAdditionalKyc(payload.additionalKyc);
+        const additionalKyc =  payload.additionalKyc ? this.normalizeAdditionalKyc(payload.additionalKyc):undefined;
 
         user.ownerProfile = {
             ...user.ownerProfile,
@@ -73,6 +80,58 @@ export class OwnerService {
             tokens,
         };
     }
+
+    
+
+    // async activateOwnerMode(
+    //     userId: string,
+    //     payload: OwnerActivationDto,
+    //     files: OwnerDocumentsUpload
+    // ): Promise<ModeSwitchResponse> {
+    //     const user = await this.userRepository.findById(userId);
+    //     if (!user) {
+    //         throw new NotFoundError('User');
+    //     }
+
+    //     const profilePhoto = this.pickFile(files, 'profilePhoto');
+    //     const citizenshipFront = this.pickFile(files, 'citizenshipFront');
+    //     const citizenshipBack = this.pickFile(files, 'citizenshipBack');
+
+    //     const folder = `${config.cloudinary.baseFolder ?? 'futsmandu'}/owners/${user._id.toString()}`;
+
+    //     const [profilePhotoUpload, frontUpload, backUpload] = await Promise.all([
+    //         uploadImageBuffer(profilePhoto, { folder, publicId: 'profile-photo' }),
+    //         uploadImageBuffer(citizenshipFront, { folder, publicId: 'citizenship-front' }),
+    //         uploadImageBuffer(citizenshipBack, { folder, publicId: 'citizenship-back' }),
+    //     ]);
+
+    //     const additionalKyc = this.normalizeAdditionalKyc(payload.additionalKyc);
+
+    //     user.ownerProfile = {
+    //         ...user.ownerProfile,
+    //         profilePhotoUrl: profilePhotoUpload.secure_url,
+    //         citizenshipFrontUrl: frontUpload.secure_url,
+    //         citizenshipBackUrl: backUpload.secure_url,
+    //         panNumber: payload.panNumber,
+    //         address: payload.address,
+    //         additionalKyc: additionalKyc ? new Map(Object.entries(additionalKyc)) : undefined,
+    //         status: OwnerVerificationStatus.PENDING,
+    //         lastSubmittedAt: new Date(),
+    //     };
+
+    //     user.mode = UserMode.OWNER;
+    //     user.role = UserRole.OWNER;
+
+    //     await user.save();
+
+    //     const tokens = this.authService.generateUserTokens(user);
+    //     await this.userRepository.updateRefreshToken(user._id.toString(), tokens.refreshToken);
+
+    //     return {
+    //         user: this.authService.toPublicUser(user),
+    //         tokens,
+    //     };
+    // }
 
     async deactivateOwnerMode(userId: string): Promise<ModeSwitchResponse> {
         const user = await this.userRepository.findById(userId);
@@ -117,88 +176,167 @@ export class OwnerService {
     }
 
     private normalizeAdditionalKyc(
-        data: OwnerActivationDto['additionalKyc']
-    ): Record<string, string> | undefined {
-        if (!data) {
-            return undefined;
-        }
+    data: OwnerActivationDto['additionalKyc']
+): Record<string, string> | undefined {
+    if (!data) return undefined;
 
-        if (typeof data === 'string') {
-            try {
-                const parsed = JSON.parse(data);
-                return this.normalizeAdditionalKyc(parsed as Record<string, string>);
-            } catch (error) {
-                throw new ValidationError('Invalid additionalKyc payload');
-            }
-        }
-
-        if (typeof data === 'object' && !Array.isArray(data)) {
-            return Object.entries(data).reduce<Record<string, string>>((acc, [key, value]) => {
+    try {
+        // Handle both string JSON and object cases
+        const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+        
+        if (typeof parsedData === 'object' && !Array.isArray(parsedData) && parsedData !== null) {
+            return Object.entries(parsedData).reduce<Record<string, string>>((acc, [key, value]) => {
                 acc[key] = String(value ?? '');
                 return acc;
             }, {});
         }
-
+        
         return undefined;
+    } catch (error) {
+        throw new ValidationError('Invalid additionalKyc format');
     }
+}
 
     /**
-     * Create a new futsal court (venue)
+     * Create a new venue with courts
+     * At least one court (5v5 or 6v6) is required
+     * Applies smart defaults for courts and handles image uploads
      */
-    async createFutsalCourt(
+    async createVenue(
         userId: string, 
-        futsalCourtData: CreateFutsalCourtRequest,
-        images?: Express.Multer.File[]
+        venueData: CreateFutsalVenueRequest,
+        venueImages?: Express.Multer.File[],
+        courtImagesMap?: { [courtIndex: number]: Express.Multer.File[] }
     ) {
-        let imageUrls: string[] = [];
+        const user = await this.userRepository.findById(userId);
+        if (!user) {
+            throw new NotFoundError('User');
+        }
 
-        // Upload images to Cloudinary if provided
-        if (images && images.length > 0) {
-            const user = await this.userRepository.findById(userId);
-            if (!user) {
-                throw new NotFoundError('User');
-            }
+        const baseFolder = `${config.cloudinary.baseFolder ?? 'futsmandu'}/venues/${userId}`;
+        let venueImageUrls: string[] = [];
 
-            const folder = `${config.cloudinary.baseFolder ?? 'futsmandu'}/futsal-courts/${userId}`;
-            
-            // Upload all images in parallel
-            const uploadPromises = images.map((image, index) => 
+        // Upload venue images to Cloudinary if provided
+        if (venueImages && venueImages.length > 0) {
+            const uploadPromises = venueImages.map((image, index) => 
                 uploadImageBuffer(image, { 
-                    folder, 
-                    publicId: `image-${Date.now()}-${index}` 
+                    folder: baseFolder, 
+                    publicId: `venue-image-${Date.now()}-${index}` 
                 })
             );
 
             const uploadResults = await Promise.all(uploadPromises);
-            imageUrls = uploadResults.map(result => result.secure_url);
+            venueImageUrls = uploadResults.map(result => result.secure_url);
 
-            logger.info('Futsal court images uploaded', {
+            logger.info('Venue images uploaded', {
                 userId,
-                imageCount: imageUrls.length
+                imageCount: venueImageUrls.length
             });
         }
 
-        // Add image URLs to futsal court data
-        const futsalCourtDataWithImages = {
-            ...futsalCourtData,
-            images: imageUrls.length > 0 ? imageUrls : futsalCourtData.images || []
+        // Upload court images and apply smart defaults to courts
+        const courtsWithDefaults = await Promise.all(
+            venueData.courts.map(async (court, index) => {
+                // Upload court images if provided
+                let courtImageUrls: string[] = [];
+                if (courtImagesMap && courtImagesMap[index] && courtImagesMap[index].length > 0) {
+                    const courtFolder = `${baseFolder}/courts/court-${index}`;
+                    const uploadPromises = courtImagesMap[index].map((image, imgIndex) => 
+                        uploadImageBuffer(image, { 
+                            folder: courtFolder, 
+                            publicId: `court-image-${Date.now()}-${imgIndex}` 
+                        })
+                    );
+
+                    const uploadResults = await Promise.all(uploadPromises);
+                    courtImageUrls = uploadResults.map(result => result.secure_url);
+                }
+
+                // Apply smart defaults
+                const courtWithDefaults = this.applyCourtDefaults(court, venueData.openingHours);
+                
+                return {
+                    ...courtWithDefaults,
+                    images: courtImageUrls.length > 0 ? courtImageUrls : (court.images || [])
+                };
+            })
+        );
+
+        // Add image URLs to venue data
+        const venueDataWithImages: CreateFutsalVenueRequest = {
+            ...venueData,
+            images: venueImageUrls.length > 0 ? venueImageUrls : (venueData.images || []),
+            courts: courtsWithDefaults
         };
 
-        return this.courtService.createFutsalCourt(futsalCourtDataWithImages, userId);
+        return this.courtService.createVenueWithCourts(venueDataWithImages, userId);
+    }
+
+    /**
+     * Apply smart defaults to court data
+     * - maxPlayers: auto-calculate based on size (5v5=10, 6v6=12, 7v7=14)
+     * - openingTime/closingTime: inherit from venue's first day opening hours
+     * - peakHourRate: auto-calculate as hourlyRate * 1.25
+     * - isActive: default to true
+     * - isAvailable: default to true
+     * - amenities: default to empty array
+     */
+    private applyCourtDefaults(
+        court: CreateFutsalVenueRequest['courts'][0],
+        venueOpeningHours: CreateFutsalVenueRequest['openingHours']
+    ): CreateFutsalVenueRequest['courts'][0] {
+        // Calculate maxPlayers based on size
+        const calculateMaxPlayers = (size: string): number => {
+            switch (size) {
+                case '5v5':
+                    return 10;
+                case '6v6':
+                    return 12;
+                case '7v7':
+                    return 14;
+                default:
+                    return 10; // Default fallback
+            }
+        };
+
+        // Get venue opening hours from first available day
+        const getVenueOpeningHours = (): { open: string; close: string } => {
+            const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+            for (const day of days) {
+                if (venueOpeningHours[day as keyof typeof venueOpeningHours]) {
+                    return venueOpeningHours[day as keyof typeof venueOpeningHours];
+                }
+            }
+            // Fallback to default hours
+            return { open: '06:00', close: '22:00' };
+        };
+
+        const venueHours = getVenueOpeningHours();
+
+        return {
+            ...court,
+            maxPlayers: court.maxPlayers ?? calculateMaxPlayers(court.size),
+            openingTime: court.openingTime ?? venueHours.open,
+            closingTime: court.closingTime ?? venueHours.close,
+            peakHourRate: court.peakHourRate ?? Math.round(court.hourlyRate * 1.25),
+            isActive: court.isActive ?? true,
+            isAvailable: court.isAvailable ?? true,
+            amenities: court.amenities ?? []
+        };
     }
 
     /**
      * Get owner dashboard analytics
      */
     async getDashboardAnalytics(ownerId: string) {
-        // Get all futsal courts owned by user
-        const { futsalCourts, courts } = await this.courtService.getOwnerCourts(ownerId);
-        const futsalCourtIds = futsalCourts.map(fc => fc.id!);
+        // Get all venues owned by user
+        const { venues, courts } = await this.courtService.getOwnerVenues(ownerId);
+        const venueIds = venues.map(v => v.id!);
 
-        // Get all bookings for owner's futsal courts
+        // Get all bookings for owner's venues
         const allBookings = await Promise.all(
-            futsalCourtIds.map(futsalCourtId =>
-                this.bookingRepository.findBookingsByOwner(ownerId, { futsalCourtId })
+            venueIds.map(venueId =>
+                this.bookingRepository.findBookingsByOwner(ownerId, { venueId })
             )
         );
         const bookings = allBookings.flat();
@@ -267,7 +405,7 @@ export class OwnerService {
 
         return {
             overview: {
-                totalFutsalCourts: futsalCourts.length,
+                totalVenues: venues.length,
                 totalCourts,
                 activeCourts,
                 availableCourts,
