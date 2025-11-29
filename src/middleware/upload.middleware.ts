@@ -36,3 +36,15 @@ export const futsalCourtImagesUpload = multer({
     },
 }).array('images', 10);
 
+// Venue creation with venue images and court images
+// Handles: venueImages (array) and courtImages[0], courtImages[1], etc. (arrays)
+// Uses any() to handle dynamic field names for court images
+export const venueCreationUpload = multer({
+    storage,
+    fileFilter,
+    limits: {
+        fileSize: 5 * 1024 * 1024, // 5 MB per file
+        files: 50, // Maximum 50 images total (venue + all courts)
+    },
+}).any();
+
