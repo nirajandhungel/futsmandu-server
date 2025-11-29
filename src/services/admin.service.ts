@@ -14,7 +14,7 @@ import { NotFoundError, ValidationError } from '../middleware/error.middleware.j
 import { OwnerVerificationStatus, UserMode, UserRole } from '../types/common.types.js';
 import { calculatePagination } from '../utils/helpers.js';
 import { APP_CONSTANTS } from '../config/constants.js';
-import { FutsalCourtModel, CourtModel } from '../models/court.model.js';
+import { FutsalVenueModel, CourtModel } from '../models/court.model.js';
 import logger from '../utils/logger.js';
 
 export class AdminService {
@@ -37,11 +37,11 @@ export class AdminService {
             pendingOwnerRequests,
             approvedOwners,
             rejectedOwners,
-            totalFutsalCourts,
-            verifiedFutsalCourts,
-            pendingFutsalCourts,
-            activeFutsalCourts,
-            suspendedFutsalCourts
+            totalVenues,
+            verifiedVenues,
+            pendingVenues,
+            activeVenues,
+            suspendedVenues
         ] = await Promise.all([
             this.userRepository.count({}),
             this.userRepository.count({ role: UserRole.OWNER }),
@@ -49,11 +49,11 @@ export class AdminService {
             this.userRepository.count({ 'ownerProfile.status': OwnerVerificationStatus.PENDING }),
             this.userRepository.count({ 'ownerProfile.status': OwnerVerificationStatus.APPROVED }),
             this.userRepository.count({ 'ownerProfile.status': OwnerVerificationStatus.REJECTED }),
-            FutsalCourtModel.countDocuments({}),
-            FutsalCourtModel.countDocuments({ isVerified: true, isActive: true }),
-            FutsalCourtModel.countDocuments({ isVerified: false, isActive: true }),
-            FutsalCourtModel.countDocuments({ isActive: true }),
-            FutsalCourtModel.countDocuments({ isActive: false })
+            FutsalVenueModel.countDocuments({}),
+            FutsalVenueModel.countDocuments({ isVerified: true, isActive: true }),
+            FutsalVenueModel.countDocuments({ isVerified: false, isActive: true }),
+            FutsalVenueModel.countDocuments({ isActive: true }),
+            FutsalVenueModel.countDocuments({ isActive: false })
         ]);
 
         return {
@@ -63,11 +63,11 @@ export class AdminService {
             pendingOwnerRequests,
             approvedOwners,
             rejectedOwners,
-            totalFutsalCourts,
-            verifiedFutsalCourts,
-            pendingFutsalCourts,
-            activeFutsalCourts,
-            suspendedFutsalCourts
+            totalVenues,
+            verifiedVenues,
+            pendingVenues,
+            activeVenues,
+            suspendedVenues
         };
     }
 
@@ -383,76 +383,76 @@ export class AdminService {
             sort.createdAt = -1;
         }
 
-        const [futsalCourts, total] = await Promise.all([
-            FutsalCourtModel.find(filter)
+        const [venues, total] = await Promise.all([
+            FutsalVenueModel.find(filter)
                 .populate('ownerId', 'email fullName phoneNumber')
                 .sort(sort)
                 .skip(skip)
                 .limit(limit)
                 .lean(),
-            FutsalCourtModel.countDocuments(filter)
+            FutsalVenueModel.countDocuments(filter)
         ]);
 
         const pagination = calculatePagination(page, limit, total);
 
         return {
-            futsalCourts,
+            venues,
             pagination
         };
     }
 
     /**
-     * Verify futsal court
+     * Verify venue
      */
-    async verifyFutsalCourt(futsalCourtId: string): Promise<any> {
-        const futsalCourt = await FutsalCourtModel.findById(futsalCourtId);
+    async verifyVenue(venueId: string): Promise<any> {
+        const venue = await FutsalVenueModel.findById(venueId);
         
-        if (!futsalCourt) {
-            throw new NotFoundError('Futsal court');
+        if (!venue) {
+            throw new NotFoundError('Venue');
         }
 
-        futsalCourt.isVerified = true;
-        await futsalCourt.save();
+        venue.isVerified = true;
+        await venue.save();
 
-        logger.info('Futsal court verified', { futsalCourtId });
+        logger.info('Venue verified', { venueId });
 
-        return futsalCourt;
+        return venue;
     }
 
     /**
-     * Suspend futsal court
+     * Suspend venue
      */
-    async suspendFutsalCourt(futsalCourtId: string): Promise<any> {
-        const futsalCourt = await FutsalCourtModel.findById(futsalCourtId);
+    async suspendVenue(venueId: string): Promise<any> {
+        const venue = await FutsalVenueModel.findById(venueId);
         
-        if (!futsalCourt) {
-            throw new NotFoundError('Futsal court');
+        if (!venue) {
+            throw new NotFoundError('Venue');
         }
 
-        futsalCourt.isActive = false;
-        await futsalCourt.save();
+        venue.isActive = false;
+        await venue.save();
 
-        logger.info('Futsal court suspended', { futsalCourtId });
+        logger.info('Venue suspended', { venueId });
 
-        return futsalCourt;
+        return venue;
     }
 
     /**
-     * Reactivate futsal court
+     * Reactivate venue
      */
-    async reactivateFutsalCourt(futsalCourtId: string): Promise<any> {
-        const futsalCourt = await FutsalCourtModel.findById(futsalCourtId);
+    async reactivateVenue(venueId: string): Promise<any> {
+        const venue = await FutsalVenueModel.findById(venueId);
         
-        if (!futsalCourt) {
-            throw new NotFoundError('Futsal court');
+        if (!venue) {
+            throw new NotFoundError('Venue');
         }
 
-        futsalCourt.isActive = true;
-        await futsalCourt.save();
+        venue.isActive = true;
+        await venue.save();
 
-        logger.info('Futsal court reactivated', { futsalCourtId });
+        logger.info('Venue reactivated', { venueId });
 
-        return futsalCourt;
+        return venue;
     }
 }
 
