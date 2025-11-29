@@ -1,5 +1,5 @@
 import { BookingRepository } from '../repositories/booking.repository.js';
-import { CourtRepository, FutsalCourtRepository } from '../repositories/court.repository.js';
+import { CourtRepository, VenueRepository } from '../repositories/court.repository.js';
 import { UserRepository } from '../repositories/user.repository.js';
 import { NotificationService } from './notification.service.js';
 import {
@@ -28,14 +28,14 @@ import logger from '../utils/logger.js';
 export class BookingService {
   private bookingRepository: BookingRepository;
   private courtRepository: CourtRepository;
-  private futsalCourtRepository: FutsalCourtRepository;
+  private venueRepository: VenueRepository;
   private userRepository: UserRepository;
   private notificationService: NotificationService;
 
   constructor() {
     this.bookingRepository = new BookingRepository();
     this.courtRepository = new CourtRepository();
-    this.futsalCourtRepository = new FutsalCourtRepository();
+    this.venueRepository = new VenueRepository();
     this.userRepository = new UserRepository();
     this.notificationService = new NotificationService();
   }
@@ -45,7 +45,13 @@ export class BookingService {
    */
   async createBooking(userId: string, bookingData: CreateBookingRequest): Promise<BookingWithDetails> {
     // Validate court exists
-    const court = await this.courtRepository.findCourtById(bookingData.courtId);
+     console.log('1. bookingData.courtId on service entry:', bookingData.courtId);
+    console.log('1. Type:', typeof bookingData.courtId);
+     const court = await this.courtRepository.findCourtById(bookingData.courtId);
+
+      console.log('2. After court lookup - court:', court);
+  console.log('2. bookingData.courtId now:', bookingData.courtId);
+  console.log('2. Type:', typeof bookingData.courtId);
     if (!court || !court.isActive) {
       throw new NotFoundError(
         ERROR_MESSAGES[ERROR_CODES.COURT_NOT_FOUND],
@@ -54,14 +60,19 @@ export class BookingService {
       );
     }
 
-    // Get futsal court
-    const futsalCourt = await this.futsalCourtRepository.findFutsalCourtById(court.futsalCourtId);
-    if (!futsalCourt) {
+      console.log('3. Before venue lookup - court.venueId:', court.venueId);
+  
+
+    // Get venue
+    const venue = await this.venueRepository.findVenueById(court.venueId);
+    if (!venue) {
       throw new NotFoundError(
         ERROR_MESSAGES[ERROR_CODES.COURT_NOT_FOUND],
         ERROR_CODES.COURT_NOT_FOUND
       );
     }
+
+      console.log('4. Before time conflict check - bookingData.courtId:', bookingData.courtId);
 
     // Validate date and time
     const bookingDate = new Date(bookingData.date);
@@ -80,6 +91,8 @@ export class BookingService {
       bookingData.courtId,
       bookingDate
     );
+
+     console.log('5. Before creating booking - bookingData.courtId:', bookingData.courtId);
 
     const hasConflict = existingBookings.some(booking => {
       if (booking.status === BookingStatus.CANCELLED) return false;
@@ -111,7 +124,7 @@ export class BookingService {
     // Create booking
     const booking = await this.bookingRepository.createBooking({
       courtId: bookingData.courtId,
-      futsalCourtId: court.futsalCourtId,
+      venueId: court.venueId,
       createdBy: userId,
       date: bookingDate,
       startTime: bookingData.startTime,
@@ -391,15 +404,41 @@ export class BookingService {
   }
 
   /**
-   * Get user's bookings
+   * Get user's bookings with enhanced filtering
    */
   async getMyBookings(userId: string, query?: BookingSearchQuery): Promise<BookingWithDetails[]> {
+    logger.debug('Fetching user bookings', { userId, query });
+    
     const bookings = await this.bookingRepository.findBookingsByUserId(userId, query);
-    return Promise.all(bookings.map(b => this.getBookingWithDetails(b.id!)));
+    
+    // Apply additional sorting if requested
+    let sortedBookings = bookings;
+    if (query?.sortBy) {
+      sortedBookings = bookings.sort((a, b) => {
+        const sortOrder = query.sortOrder === 'asc' ? 1 : -1;
+        
+        switch (query.sortBy) {
+          case 'date': {
+            const aDate = new Date(a.date).getTime();
+            const bDate = new Date(b.date).getTime();
+            return (aDate - bDate) * sortOrder;
+          }
+          case 'createdAt': {
+            const aCreated = new Date(a.createdAt || 0).getTime();
+            const bCreated = new Date(b.createdAt || 0).getTime();
+            return (aCreated - bCreated) * sortOrder;
+          }
+          default:
+            return 0;
+        }
+      });
+    }
+    
+    return Promise.all(sortedBookings.map(b => this.getBookingWithDetails(b.id!)));
   }
 
   /**
-   * Get public group matches
+   * Get public group matches with enhanced filtering and sorting
    */
   async getPublicGroupMatches(query?: BookingSearchQuery): Promise<GroupMatchListResponse> {
     const bookings = await this.bookingRepository.findPublicGroupMatches(query);
@@ -407,10 +446,11 @@ export class BookingService {
     const groups = await Promise.all(
       bookings.map(async (booking) => {
         const court = await this.courtRepository.findCourtById(booking.courtId);
-        const futsalCourt = await this.futsalCourtRepository.findFutsalCourtById(booking.futsalCourtId);
+        const venue = await this.venueRepository.findVenueById(booking.venueId);
         const creator = await this.userRepository.findById(booking.createdBy);
 
         const activePlayers = booking.players.filter(p => p.status === 'active').length;
+        const availableSlots = booking.maxPlayers - activePlayers;
 
         return {
           bookingId: booking.id!,
@@ -422,17 +462,43 @@ export class BookingService {
           maxPlayers: booking.maxPlayers,
           groupType: booking.groupType,
           status: booking.status,
+          bookingType: booking.bookingType,
           courtName: court?.name || 'Unknown',
-          futsalCourtName: futsalCourt?.name || 'Unknown',
-          location: futsalCourt?.location || { address: '', city: '' },
+          venueName: venue?.name || 'Unknown',
+          location: venue?.location || { address: '', city: '' },
           hourlyRate: court?.hourlyRate || 0,
+          peakHourRate: court?.peakHourRate,
           creatorName: creator?.fullName || 'Unknown',
-          availableSlots: booking.maxPlayers - activePlayers
+          creatorId: booking.createdBy,
+          availableSlots,
+          totalAmount: booking.totalAmount,
+          createdAt: booking.createdAt
         };
       })
     );
 
+    logger.debug('Public group matches retrieved', {
+      count: groups.length,
+      filters: query
+    });
+
     return { groups };
+  }
+
+  /**
+   * Get joinable bookings sorted by player count (for solo players)
+   * Returns bookings that need more players, sorted by available slots (descending)
+   */
+  async getJoinableBookings(query?: BookingSearchQuery): Promise<GroupMatchListResponse> {
+    const searchQuery: BookingSearchQuery = {
+      ...query,
+      groupType: 'public',
+      sortBy: query?.sortBy || 'players', // Default sort by player count
+      sortOrder: query?.sortOrder || 'desc', // Default: most available slots first
+      availableSlots: query?.availableSlots || 1 // At least 1 slot available
+    };
+
+    return this.getPublicGroupMatches(searchQuery);
   }
 
   /**
@@ -448,31 +514,52 @@ export class BookingService {
       );
     }
 
-    const court = await this.courtRepository.findCourtById(booking.courtId.toString());
-    const futsalCourt = await this.futsalCourtRepository.findFutsalCourtById(booking.futsalCourtId.toString());
-    const creator = await this.userRepository.findById(booking.createdBy.toString());
+     console.log('Nirajan Booking courtId:', booking.courtId);
+  console.log('Type of courtId:', typeof booking.courtId);
+
+
+    // Extract the actual court ID
+    const courtId = typeof booking.courtId === 'string' 
+      ? booking.courtId 
+      : (booking.courtId as any)._id?.toString() || booking.courtId.toString();
+
+    const venueId = typeof booking.venueId === 'string'
+      ? booking.venueId
+      : (booking.venueId as any)._id?.toString() || booking.venueId.toString();
+
+    const createdBy = typeof booking.createdBy === 'string'
+      ? booking.createdBy
+      : (booking.createdBy as any)._id?.toString() || booking.createdBy.toString();
+
+    const court = await this.courtRepository.findCourtById(courtId);
+    const venue = await this.venueRepository.findVenueById(venueId);
+    const creator = await this.userRepository.findById(createdBy);
 
     const playersDetails = await Promise.all(
-      booking.players
-        .filter(p => p.status === 'active')
-        .map(async (p) => {
-          const user = await this.userRepository.findById(p.userId.toString());
-          return {
-            id: p.userId.toString(),
-            fullName: user?.fullName || 'Unknown',
-            profileImage: user?.profileImage,
-            joinedAt: p.joinedAt,
-            isAdmin: p.isAdmin
-          };
-        })
-    );
-
+  booking.players
+    .filter(p => p.status === 'active')
+    .map(async (p) => {
+      // Extract userId from populated user object
+      const playerUserId = typeof p.userId === 'string' 
+        ? p.userId 
+        : (p.userId as any)._id?.toString() || p.userId.toString();
+      
+      const user = await this.userRepository.findById(playerUserId);
+      return {
+        id: playerUserId,
+        fullName: user?.fullName || 'Unknown',
+        profileImage: user?.profileImage,
+        joinedAt: p.joinedAt,
+        isAdmin: p.isAdmin
+      };
+    })
+);
     const bookingDTO: Booking = {
       id: booking._id.toString(),
       _id: booking._id.toString(),
-      courtId: booking.courtId.toString(),
-      futsalCourtId: booking.futsalCourtId.toString(),
-      createdBy: booking.createdBy.toString(),
+      courtId: courtId,
+      venueId: venueId,
+      createdBy: createdBy,
       date: booking.date,
       startTime: booking.startTime,
       endTime: booking.endTime,
@@ -481,19 +568,37 @@ export class BookingService {
       bookingType: booking.bookingType,
       groupType: booking.groupType,
       maxPlayers: booking.maxPlayers,
-      players: booking.players.map(p => ({
-        userId: p.userId.toString(),
-        joinedAt: p.joinedAt,
-        isAdmin: p.isAdmin,
-        status: p.status
-      })),
-      invites: booking.invites.map(i => ({
-        userId: i.userId.toString(),
-        invitedBy: i.invitedBy.toString(),
-        status: i.status,
-        invitedAt: i.invitedAt,
-        respondedAt: i.respondedAt
-      })),
+      players: booking.players.map(p => {
+    // Extract userId from populated user object
+    const playerUserId = typeof p.userId === 'string' 
+      ? p.userId 
+      : (p.userId as any)._id?.toString() || p.userId.toString();
+    
+    return {
+      userId: playerUserId,  // Use the extracted userId
+      joinedAt: p.joinedAt,
+      isAdmin: p.isAdmin,
+      status: p.status
+    };
+  }),
+      invites: booking.invites.map(i => {
+    // Extract userId and invitedBy from populated user objects
+    const inviteUserId = typeof i.userId === 'string'
+      ? i.userId
+      : (i.userId as any)._id?.toString() || i.userId.toString();
+    
+    const inviteInvitedBy = typeof i.invitedBy === 'string'
+      ? i.invitedBy
+      : (i.invitedBy as any)._id?.toString() || i.invitedBy.toString();
+    
+    return {
+      userId: inviteUserId,
+      invitedBy: inviteInvitedBy,
+      status: i.status,
+      invitedAt: i.invitedAt,
+      respondedAt: i.respondedAt
+    };
+  }),
       paymentStatus: booking.paymentStatus,
       ownerApproved: booking.ownerApproved,
       ownerApprovedAt: booking.ownerApprovedAt,
@@ -513,10 +618,10 @@ export class BookingService {
         hourlyRate: court.hourlyRate,
         peakHourRate: court.peakHourRate
       } : undefined,
-      futsalCourt: futsalCourt ? {
-        id: futsalCourt.id!,
-        name: futsalCourt.name,
-        location: futsalCourt.location
+      venue: venue ? {
+        id: venue.id!,
+        name: venue.name,
+        location: venue.location
       } : undefined,
       creator: creator ? {
         id: creator._id.toString(),
@@ -560,8 +665,8 @@ export class BookingService {
     }
 
     // Verify ownership
-    const futsalCourt = await this.futsalCourtRepository.findFutsalCourtById(booking.futsalCourtId);
-    if (!futsalCourt || futsalCourt.ownerId !== ownerId) {
+    const venue = await this.venueRepository.findVenueById(booking.venueId);
+    if (!venue || venue.ownerId !== ownerId) {
       throw new AuthorizationError(
         ERROR_MESSAGES[ERROR_CODES.AUTH_INSUFFICIENT_PERMISSIONS],
         ERROR_CODES.AUTH_INSUFFICIENT_PERMISSIONS,
@@ -603,8 +708,8 @@ export class BookingService {
     }
 
     // Verify ownership
-    const futsalCourt = await this.futsalCourtRepository.findFutsalCourtById(booking.futsalCourtId);
-    if (!futsalCourt || futsalCourt.ownerId !== ownerId) {
+    const venue = await this.venueRepository.findVenueById(booking.venueId);
+    if (!venue || venue.ownerId !== ownerId) {
       throw new AuthorizationError(
         ERROR_MESSAGES[ERROR_CODES.AUTH_INSUFFICIENT_PERMISSIONS],
         ERROR_CODES.AUTH_INSUFFICIENT_PERMISSIONS,
