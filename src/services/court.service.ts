@@ -1,12 +1,16 @@
-import { CourtRepository, FutsalCourtRepository } from '../repositories/court.repository.js';
+import mongoose from 'mongoose';
+import { CourtRepository, VenueRepository } from '../repositories/court.repository.js';
 import { 
   CreateCourtRequest, 
   UpdateCourtRequest, 
   Court, 
-  FutsalCourt,
+  FutsalVenue,
+  CreateFutsalVenueRequest,
   CourtSearchQuery,
-  FutsalCourtSearchQuery,
-  CourtAvailability
+  VenueSearchQuery,
+  CourtAvailability,
+  OwnerVenuesResponse,
+  FutsalVenueWithCourts
 } from '../types/court.types.js';
 import { 
   NotFoundError, 
@@ -20,53 +24,243 @@ import logger from '../utils/logger.js';
 
 export class CourtService {
   private courtRepository: CourtRepository;
-  private futsalCourtRepository: FutsalCourtRepository;
+  private venueRepository: VenueRepository;
 
   constructor() {
     this.courtRepository = new CourtRepository();
-    this.futsalCourtRepository = new FutsalCourtRepository();
+    this.venueRepository = new VenueRepository();
   }
 
-  // ==================== COURT OPERATIONS (Owner) ====================
+  // ==================== VENUE + COURT OPERATIONS (Owner) ====================
 
   /**
-   * Create a new court within a futsal venue
-   * @throws {NotFoundError} If futsal court not found
+   * Create a new venue with at least one court (5v5 or 6v6)
+   * Courts are created in the same transaction
+   * @throws {ValidationError} If no courts provided or no 5v5/6v6 court
+   * @throws {ConflictError} If venue name already exists for owner
+   */
+  async createVenueWithCourts(
+    venueData: CreateFutsalVenueRequest,
+    ownerId: string
+  ): Promise<FutsalVenueWithCourts> {
+    // Validate: At least one court required
+    if (!venueData.courts || venueData.courts.length === 0) {
+      throw new ValidationError(
+        'At least one court (5v5 or 6v6) is required when creating a venue',
+        {
+          field: 'courts',
+          message: 'A venue must have at least one court with size 5v5 or 6v6'
+        }
+      );
+    }
+
+    // Validate: At least one court must be 5v5 or 6v6
+    const hasValidCourt = venueData.courts.some(court => 
+      court.size === '5v5' || court.size === '6v6'
+    );
+
+    if (!hasValidCourt) {
+      throw new ValidationError(
+        'At least one court must be 5v5 or 6v6 size',
+        {
+          field: 'courts',
+          message: 'A venue must have at least one court with size 5v5 or 6v6'
+        }
+      );
+    }
+
+    // Check if venue name already exists for this owner
+    const exists = await this.venueRepository.venueExistsByName(
+      venueData.name,
+      ownerId
+    );
+
+    if (exists) {
+      throw new ConflictError(
+        ERROR_MESSAGES[ERROR_CODES.RESOURCE_ALREADY_EXISTS],
+        ERROR_CODES.RESOURCE_ALREADY_EXISTS,
+        {
+          field: 'name',
+          value: venueData.name,
+          message: 'A venue with this name already exists'
+        }
+      );
+    }
+
+    // Validate court numbers are unique
+    const courtNumbers = venueData.courts.map(c => c.courtNumber);
+    const uniqueCourtNumbers = new Set(courtNumbers);
+    if (courtNumbers.length !== uniqueCourtNumbers.size) {
+      throw new ValidationError(
+        'Court numbers must be unique within the venue',
+        {
+          field: 'courts',
+          message: 'Each court must have a unique court number'
+        }
+      );
+    }
+
+    // Start transaction
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      logger.info('📍 Starting venue creation transaction', {
+        ownerId,
+        courtCount: venueData.courts?.length || 0,
+        venueName: venueData.name
+      });
+
+      // Create venue with session
+      const venue = await this.venueRepository.createVenue({
+        ...venueData,
+        courts: undefined, // Remove courts from venue data
+        ownerId,
+        isVerified: false,
+        isActive: true,
+        rating: 0,
+        totalReviews: 0
+      }, session);
+
+      logger.info('📍 Venue created successfully', {
+        venueId: venue.id,
+        venueName: venue.name
+      });
+
+      // Validate courts data before creating
+      if (!venueData.courts || venueData.courts.length === 0) {
+        throw new ValidationError(
+          'At least one court is required when creating a venue',
+          {
+            field: 'courts',
+            message: 'A venue must have at least one court'
+          }
+        );
+      }
+
+      // Create all courts for the venue
+      // Note: Smart defaults should already be applied in owner service
+      // But we ensure required fields are present here as a safety check
+      const courtsData = venueData.courts.map((court, index) => {
+        // Validate required fields
+        if (!court.courtNumber || !court.name || !court.size || !court.hourlyRate) {
+          throw new ValidationError(
+            `Court at index ${index} missing required fields: courtNumber, name, size, and hourlyRate are required`,
+            {
+              field: `courts[${index}]`,
+              message: 'Each court must have courtNumber, name, size, and hourlyRate',
+              courtData: court
+            }
+          );
+        }
+
+        // Ensure all fields have values (defaults should be applied in owner service)
+        const courtData = {
+          ...court,
+          venueId: venue.id!,
+          maxPlayers: court.maxPlayers ?? 10,
+          openingTime: court.openingTime ?? '06:00',
+          closingTime: court.closingTime ?? '22:00',
+          peakHourRate: court.peakHourRate ?? Math.round(court.hourlyRate * 1.25),
+          isActive: court.isActive ?? true,
+          isAvailable: court.isAvailable ?? true,
+          amenities: Array.isArray(court.amenities) ? court.amenities : (court.amenities ? [court.amenities] : [])
+        };
+
+        logger.debug('📍 Court data prepared', {
+          courtIndex: index,
+          courtNumber: courtData.courtNumber,
+          name: courtData.name,
+          size: courtData.size,
+          venueId: courtData.venueId
+        });
+
+        return courtData;
+      });
+
+      logger.info('📍 Creating courts in database', {
+        courtCount: courtsData.length,
+        venueId: venue.id
+      });
+
+      // Create courts with session
+      const courts = await this.courtRepository.createCourts(courtsData, session);
+
+      logger.info('📍 Courts created successfully', {
+        courtCount: courts.length,
+        courtIds: courts.map(c => c.id),
+        venueId: venue.id
+      });
+
+      // Commit transaction
+      await session.commitTransaction();
+
+      logger.info('📍 Transaction committed successfully', {
+        venueId: venue.id,
+        ownerId,
+        courtCount: courts.length,
+        venueName: venue.name
+      });
+
+      return {
+        ...venue,
+        courts,
+        totalCourts: courts.length,
+        activeCourts: courts.filter(c => c.isActive).length
+      };
+    } catch (error) {
+      await session.abortTransaction();
+      logger.error('❌ Failed to create venue with courts - transaction aborted', { 
+        error,
+        ownerId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined
+      });
+      throw error;
+    } finally {
+      session.endSession();
+      logger.debug('📍 Transaction session ended');
+    }
+  }
+
+  /**
+   * Add a new court to an existing venue
+   * @throws {NotFoundError} If venue not found
    * @throws {AuthorizationError} If user is not the owner
    * @throws {ConflictError} If court number already exists
    */
-  async createCourt(
-    courtData: CreateCourtRequest, 
-    futsalCourtId: string, 
+  async addCourtToVenue(
+    courtData: CreateCourtRequest,
+    venueId: string,
     ownerId: string
   ): Promise<Court> {
-    // Verify futsal court exists
-    const futsalCourt = await this.futsalCourtRepository.findFutsalCourtById(futsalCourtId);
+    // Verify venue exists
+    const venue = await this.venueRepository.findVenueById(venueId);
     
-    if (!futsalCourt) {
+    if (!venue) {
       throw new NotFoundError(
         ERROR_MESSAGES[ERROR_CODES.COURT_NOT_FOUND],
         ERROR_CODES.COURT_NOT_FOUND,
-        { futsalCourtId }
+        { venueId }
       );
     }
 
     // Verify ownership
-    if (futsalCourt.ownerId !== ownerId) {
+    if (venue.ownerId !== ownerId) {
       throw new AuthorizationError(
         ERROR_MESSAGES[ERROR_CODES.AUTH_INSUFFICIENT_PERMISSIONS],
         ERROR_CODES.AUTH_INSUFFICIENT_PERMISSIONS,
         { 
-          reason: 'You can only add courts to your own futsal venues',
-          futsalCourtId,
-          ownerId: futsalCourt.ownerId
+          reason: 'You can only add courts to your own venues',
+          venueId,
+          ownerId: venue.ownerId
         }
       );
     }
 
     // Check if court number already exists
     const courtNumberExists = await this.courtRepository.courtNumberExists(
-      futsalCourtId, 
+      venueId,
       courtData.courtNumber
     );
 
@@ -85,12 +279,14 @@ export class CourtService {
     // Create the court
     const court = await this.courtRepository.createCourt({
       ...courtData,
-      futsalCourtId
+      venueId,
+      isActive: courtData.isActive ?? true,
+      isAvailable: courtData.isAvailable ?? true
     });
 
-    logger.info('Court created successfully', {
+    logger.info('Court added to venue', {
       courtId: court.id,
-      futsalCourtId,
+      venueId,
       ownerId,
       courtNumber: court.courtNumber
     });
@@ -99,73 +295,39 @@ export class CourtService {
   }
 
   /**
-   * Create a new futsal court (venue)
-   * @throws {ConflictError} If futsal court name already exists for owner
+   * Get all venues and courts owned by a user
    */
-  async createFutsalCourt(
-    futsalCourtData: any,
-    ownerId: string
-  ): Promise<FutsalCourt> {
-    // Check if futsal court with same name already exists for this owner
-    const exists = await this.futsalCourtRepository.futsalCourtExistsByName(
-      futsalCourtData.name,
-      ownerId
-    );
+  async getOwnerVenues(ownerId: string): Promise<OwnerVenuesResponse> {
+    const venues = await this.venueRepository.findVenuesByOwnerId(ownerId);
 
-    if (exists) {
-      throw new ConflictError(
-        ERROR_MESSAGES[ERROR_CODES.RESOURCE_ALREADY_EXISTS],
-        ERROR_CODES.RESOURCE_ALREADY_EXISTS,
-        {
-          field: 'name',
-          value: futsalCourtData.name,
-          message: 'A futsal court with this name already exists'
-        }
-      );
+    if (!venues.length) {
+      logger.info('No venues found for owner', { ownerId });
+      return {
+        venues: [],
+        courts: [],
+        totalVenues: 0,
+        totalCourts: 0
+      };
     }
 
-    // Create the futsal court
-    const futsalCourt = await this.futsalCourtRepository.createFutsalCourt({
-      ...futsalCourtData,
+    const venueIds = venues
+      .map((venue) => venue.id)
+      .filter((id): id is string => Boolean(id));
+
+    const courts = await this.courtRepository.findCourtsByVenueIds(venueIds);
+
+    logger.debug('Owner venues retrieved', {
       ownerId,
-      isVerified: false,
-      isActive: true,
-      rating: 0,
-      totalReviews: 0
-    });
-
-    logger.info('Futsal court created successfully', {
-      futsalCourtId: futsalCourt.id,
-      ownerId,
-      name: futsalCourt.name
-    });
-
-    return futsalCourt;
-  }
-
-  /**
-   * Get all courts and futsal venues owned by a user
-   */
-  async getOwnerCourts(ownerId: string): Promise<{ 
-    futsalCourts: FutsalCourt[], 
-    courts: Court[] 
-  }> {
-    const futsalCourts = await this.futsalCourtRepository.findFutsalCourtsByOwnerId(ownerId);
-    
-    const courts: Court[] = [];
-    
-    for (const futsalCourt of futsalCourts) {
-      const venueCourts = await this.courtRepository.findCourtsByFutsalCourtId(futsalCourt.id!);
-      courts.push(...venueCourts);
-    }
-
-    logger.debug('Owner courts retrieved', {
-      ownerId,
-      futsalCourtsCount: futsalCourts.length,
+      venueCount: venues.length,
       courtsCount: courts.length
     });
 
-    return { futsalCourts, courts };
+    return { 
+      venues, 
+      courts,
+      totalVenues: venues.length,
+      totalCourts: courts.length
+    };
   }
 
   /**
@@ -175,8 +337,8 @@ export class CourtService {
    * @throws {ConflictError} If updating to existing court number
    */
   async updateCourt(
-    courtId: string, 
-    updateData: UpdateCourtRequest, 
+    courtId: string,
+    updateData: UpdateCourtRequest,
     ownerId: string
   ): Promise<Court> {
     // Find the court
@@ -190,12 +352,10 @@ export class CourtService {
       );
     }
 
-    // Verify ownership through futsal court
-    const futsalCourt = await this.futsalCourtRepository.findFutsalCourtById(
-      court.futsalCourtId
-    );
+    // Verify ownership through venue
+    const venue = await this.venueRepository.findVenueById(court.venueId);
 
-    if (!futsalCourt || futsalCourt.ownerId !== ownerId) {
+    if (!venue || venue.ownerId !== ownerId) {
       throw new AuthorizationError(
         ERROR_MESSAGES[ERROR_CODES.AUTH_INSUFFICIENT_PERMISSIONS],
         ERROR_CODES.AUTH_INSUFFICIENT_PERMISSIONS,
@@ -209,7 +369,7 @@ export class CourtService {
     // If updating court number, check for conflicts
     if (updateData.courtNumber && updateData.courtNumber !== court.courtNumber) {
       const courtNumberExists = await this.courtRepository.courtNumberExists(
-        court.futsalCourtId,
+        court.venueId,
         updateData.courtNumber,
         courtId
       );
@@ -248,7 +408,7 @@ export class CourtService {
   }
 
   /**
-   * Delete a court (soft delete by setting isActive to false)
+   * Delete a court (soft delete)
    */
   async deleteCourt(courtId: string, ownerId: string): Promise<void> {
     const court = await this.courtRepository.findCourtById(courtId);
@@ -262,132 +422,147 @@ export class CourtService {
     }
 
     // Verify ownership
-    const futsalCourt = await this.futsalCourtRepository.findFutsalCourtById(
-      court.futsalCourtId
-    );
+    const venue = await this.venueRepository.findVenueById(court.venueId);
 
-    if (!futsalCourt || futsalCourt.ownerId !== ownerId) {
+    if (!venue || venue.ownerId !== ownerId) {
       throw new AuthorizationError(
         ERROR_MESSAGES[ERROR_CODES.AUTH_INSUFFICIENT_PERMISSIONS],
         ERROR_CODES.AUTH_INSUFFICIENT_PERMISSIONS
       );
     }
 
+    // Check if this is the last court
+    const allCourts = await this.courtRepository.findCourtsByVenueId(court.venueId);
+    const activeCourts = allCourts.filter(c => c.isActive);
+    
+    if (activeCourts.length === 1 && activeCourts[0].id === courtId) {
+      throw new BusinessLogicError(
+        'Cannot delete the last active court. A venue must have at least one active court.',
+        ERROR_CODES.BOOKING_INVALID_TIME,
+        { venueId: court.venueId }
+      );
+    }
+
     // Soft delete
-    await this.courtRepository.updateCourtById(courtId, { isActive: false ,isAvailable:false});
+    await this.courtRepository.updateCourtById(courtId, { 
+      isActive: false,
+      isAvailable: false
+    });
 
     logger.info('Court deleted successfully', { courtId, ownerId });
   }
 
-  // ==================== FUTSAL COURT OPERATIONS (Admin) ====================
+  // ==================== VENUE OPERATIONS (Admin) ====================
 
   /**
-   * Get all futsal courts (Admin only)
+   * Get all venues (Admin only)
    */
-  async getAllFutsalCourts(filter: any = {}): Promise<FutsalCourt[]> {
-    return await this.futsalCourtRepository.findAllFutsalCourts(filter);
+  async getAllVenues(filter: any = {}): Promise<FutsalVenue[]> {
+    return await this.venueRepository.findAllVenues(filter);
   }
 
   /**
-   * Verify a futsal court (Admin only)
-   * @throws {NotFoundError} If futsal court not found
+   * Verify a venue (Admin only)
+   * @throws {NotFoundError} If venue not found
    */
-  async verifyFutsalCourt(futsalCourtId: string): Promise<FutsalCourt> {
-    const futsalCourt = await this.futsalCourtRepository.verifyFutsalCourt(futsalCourtId);
+  async verifyVenue(venueId: string): Promise<FutsalVenue> {
+    const venue = await this.venueRepository.verifyVenue(venueId);
     
-    if (!futsalCourt) {
+    if (!venue) {
       throw new NotFoundError(
         ERROR_MESSAGES[ERROR_CODES.COURT_NOT_FOUND],
         ERROR_CODES.COURT_NOT_FOUND,
-        { futsalCourtId }
+        { venueId }
       );
     }
 
-    logger.info('Futsal court verified', { futsalCourtId });
+    logger.info('Venue verified', { venueId });
 
-    return futsalCourt;
+    return venue;
   }
 
   /**
-   * Suspend a futsal court (Admin only)
-   * @throws {NotFoundError} If futsal court not found
+   * Suspend a venue (Admin only)
+   * @throws {NotFoundError} If venue not found
    */
-  async suspendFutsalCourt(futsalCourtId: string): Promise<FutsalCourt> {
-    const futsalCourt = await this.futsalCourtRepository.suspendFutsalCourt(futsalCourtId);
+  async suspendVenue(venueId: string): Promise<FutsalVenue> {
+    const venue = await this.venueRepository.suspendVenue(venueId);
     
-    if (!futsalCourt) {
+    if (!venue) {
       throw new NotFoundError(
         ERROR_MESSAGES[ERROR_CODES.COURT_NOT_FOUND],
         ERROR_CODES.COURT_NOT_FOUND,
-        { futsalCourtId }
+        { venueId }
       );
     }
 
-    logger.warn('Futsal court suspended', { futsalCourtId });
+    logger.warn('Venue suspended', { venueId });
 
-    return futsalCourt;
+    return venue;
   }
 
   /**
-   * Activate a futsal court (Admin only)
+   * Activate a venue (Admin only)
    */
-  async activateFutsalCourt(futsalCourtId: string): Promise<FutsalCourt> {
-    const futsalCourt = await this.futsalCourtRepository.activateFutsalCourt(futsalCourtId);
+  async activateVenue(venueId: string): Promise<FutsalVenue> {
+    const venue = await this.venueRepository.activateVenue(venueId);
     
-    if (!futsalCourt) {
+    if (!venue) {
       throw new NotFoundError(
         ERROR_MESSAGES[ERROR_CODES.COURT_NOT_FOUND],
         ERROR_CODES.COURT_NOT_FOUND,
-        { futsalCourtId }
+        { venueId }
       );
     }
 
-    logger.info('Futsal court activated', { futsalCourtId });
+    logger.info('Venue activated', { venueId });
 
-    return futsalCourt;
+    return venue;
   }
 
   // ==================== PUBLIC OPERATIONS ====================
 
   /**
-   * Search futsal courts with filters (Public)
+   * Search venues with filters (Public)
    */
-  async searchFutsalCourts(query: FutsalCourtSearchQuery): Promise<FutsalCourt[]> {
-    return await this.futsalCourtRepository.searchFutsalCourts(query);
+  async searchVenues(query: VenueSearchQuery): Promise<FutsalVenue[]> {
+    return await this.venueRepository.searchVenues(query);
   }
 
   /**
-   * Get futsal court details by ID (Public)
-   * @throws {NotFoundError} If court not found or not public
+   * Get venue details by ID (Public)
+   * @throws {NotFoundError} If venue not found or not public
    */
-  async getFutsalCourtById(futsalCourtId: string): Promise<FutsalCourt> {
-    const futsalCourt = await this.futsalCourtRepository.findFutsalCourtById(futsalCourtId);
+  async getVenueById(venueId: string): Promise<FutsalVenue> {
+    const venue = await this.venueRepository.findVenueById(venueId);
 
-    if (!futsalCourt || !futsalCourt.isActive || !futsalCourt.isVerified) {
+    if (!venue || !venue.isActive || !venue.isVerified) {
       throw new NotFoundError(
         ERROR_MESSAGES[ERROR_CODES.COURT_NOT_FOUND],
         ERROR_CODES.COURT_NOT_FOUND,
         { 
-          futsalCourtId,
-          reason: 'Court not found or not available for public viewing'
+          venueId,
+          reason: 'Venue not found or not available for public viewing'
         }
       );
     }
 
-    return futsalCourt;
+    return venue;
   }
 
   /**
-   * Get futsal court with all its courts (Public)
+   * Get venue with all its courts (Public)
    */
-  async getFutsalCourtWithCourts(futsalCourtId: string): Promise<{ 
-    futsalCourt: FutsalCourt, 
-    courts: Court[] 
-  }> {
-    const futsalCourt = await this.getFutsalCourtById(futsalCourtId);
-    const courts = await this.courtRepository.findActiveCourtsByFutsalCourtId(futsalCourtId);
+  async getVenueWithCourts(venueId: string): Promise<FutsalVenueWithCourts> {
+    const venue = await this.getVenueById(venueId);
+    const courts = await this.courtRepository.findActiveCourtsByVenueId(venueId);
 
-    return { futsalCourt, courts };
+    return { 
+      ...venue,
+      courts,
+      totalCourts: courts.length,
+      activeCourts: courts.filter(c => c.isActive).length
+    };
   }
 
   /**
@@ -452,9 +627,6 @@ export class CourtService {
     // Generate time slots
     const availableSlots = this.generateTimeSlots(court.openingTime, court.closingTime);
 
-    // TODO: Check actual bookings and filter out booked slots
-    // This would require BookingRepository to check existing bookings
-
     return {
       courtId: court.id!,
       courtName: court.name,
@@ -488,5 +660,24 @@ export class CourtService {
    */
   async searchCourts(query: CourtSearchQuery): Promise<Court[]> {
     return await this.courtRepository.searchCourts(query);
+  }
+
+  /**
+   * Get courts available for public consumption
+   */
+  async getPublicCourts(query: CourtSearchQuery = {} as CourtSearchQuery): Promise<{ courts: Court[]; count: number; }> {
+    const normalizedQuery: CourtSearchQuery = {
+      ...query,
+      isActive: query.isActive ?? true
+    };
+
+    const courts = await this.courtRepository.searchCourts(normalizedQuery);
+
+    logger.debug('Public courts retrieved', {
+      filters: normalizedQuery,
+      count: courts.length
+    });
+
+    return { courts, count: courts.length };
   }
 }
