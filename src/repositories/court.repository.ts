@@ -2,22 +2,21 @@ import { FilterQuery } from 'mongoose';
 import { BaseRepository } from './base.repository.js';
 import { 
   CourtModel, 
-  FutsalCourtModel, 
+  FutsalVenueModel, 
   ICourtDocument, 
-  IFutsalCourtDocument 
+  IFutsalVenueDocument 
 } from '../models/court.model.js';
 import { 
   Court, 
-  FutsalCourt, 
+  FutsalVenue, 
   CreateCourtRequest, 
   UpdateCourtRequest,
   CourtSearchQuery,
-  FutsalCourtSearchQuery
+  VenueSearchQuery
 } from '../types/court.types.js';
 
 /**
  * Repository for Court entity operations
- * Extends BaseRepository for common CRUD operations
  */
 export class CourtRepository extends BaseRepository<ICourtDocument> {
   constructor() {
@@ -27,9 +26,18 @@ export class CourtRepository extends BaseRepository<ICourtDocument> {
   /**
    * Create a new court
    */
-  async createCourt(courtData: CreateCourtRequest & { futsalCourtId: string }): Promise<Court> {
-    const court = await this.create(courtData as any);
+  async createCourt(courtData: CreateCourtRequest & { venueId: string }, session?: any): Promise<Court> {
+    const court = await this.create(courtData as any, session);
     return this.toCourtDTO(court);
+  }
+
+  /**
+   * Create multiple courts for a venue
+   */
+  async createCourts(courtsData: (CreateCourtRequest & { venueId: string })[], session?: any): Promise<Court[]> {
+    const options = session ? { session } : {};
+    const courts = await this.model.insertMany(courtsData as any, options);
+    return courts.map((court: ICourtDocument) => this.toCourtDTO(court));
   }
 
   /**
@@ -41,19 +49,34 @@ export class CourtRepository extends BaseRepository<ICourtDocument> {
   }
 
   /**
-   * Find all courts for a specific futsal venue
+   * Find all courts for a specific venue
    */
-  async findCourtsByFutsalCourtId(futsalCourtId: string): Promise<Court[]> {
-    const courts = await this.find({ futsalCourtId } as FilterQuery<ICourtDocument>);
+  async findCourtsByVenueId(venueId: string): Promise<Court[]> {
+    const courts = await this.find({ venueId } as FilterQuery<ICourtDocument>);
     return courts.map(court => this.toCourtDTO(court));
   }
 
   /**
-   * Find active courts by futsal court ID
+   * Find courts by multiple venue IDs
    */
-  async findActiveCourtsByFutsalCourtId(futsalCourtId: string): Promise<Court[]> {
+  async findCourtsByVenueIds(venueIds: string[]): Promise<Court[]> {
+    if (!venueIds.length) {
+      return [];
+    }
+
+    const courts = await this.find({
+      venueId: { $in: venueIds }
+    } as FilterQuery<ICourtDocument>);
+
+    return courts.map((court) => this.toCourtDTO(court));
+  }
+
+  /**
+   * Find active courts by venue ID
+   */
+  async findActiveCourtsByVenueId(venueId: string): Promise<Court[]> {
     const courts = await this.find({ 
-      futsalCourtId, 
+      venueId, 
       isActive: true 
     } as FilterQuery<ICourtDocument>);
     return courts.map(court => this.toCourtDTO(court));
@@ -76,11 +99,11 @@ export class CourtRepository extends BaseRepository<ICourtDocument> {
   }
 
   /**
-   * Check if court number exists in a futsal venue
+   * Check if court number exists in a venue
    */
-  async courtNumberExists(futsalCourtId: string, courtNumber: string, excludeCourtId?: string): Promise<boolean> {
+  async courtNumberExists(venueId: string, courtNumber: string, excludeCourtId?: string): Promise<boolean> {
     const filter: FilterQuery<ICourtDocument> = {
-      futsalCourtId,
+      venueId,
       courtNumber
     } as any;
 
@@ -97,8 +120,8 @@ export class CourtRepository extends BaseRepository<ICourtDocument> {
   async searchCourts(query: CourtSearchQuery): Promise<Court[]> {
     const filter: FilterQuery<ICourtDocument> = {} as any;
 
-    if (query.futsalCourtId) {
-      filter.futsalCourtId = query.futsalCourtId;
+    if (query.venueId) {
+      filter.venueId = query.venueId;
     }
 
     if (query.size) {
@@ -119,6 +142,20 @@ export class CourtRepository extends BaseRepository<ICourtDocument> {
       filter.isActive = query.isActive;
     }
 
+    if (query.isAvailable !== undefined) {
+      filter.isAvailable = query.isAvailable;
+    }
+
+    if (query.minPlayers !== undefined || query.maxPlayers !== undefined) {
+      filter.maxPlayers = filter.maxPlayers || ({} as any);
+      if (query.minPlayers !== undefined) {
+        (filter.maxPlayers as any).$gte = query.minPlayers;
+      }
+      if (query.maxPlayers !== undefined) {
+        (filter.maxPlayers as any).$lte = query.maxPlayers;
+      }
+    }
+
     const courts = await this.find(filter);
     return courts.map(court => this.toCourtDTO(court));
   }
@@ -130,7 +167,7 @@ export class CourtRepository extends BaseRepository<ICourtDocument> {
     return {
       id: court._id.toString(),
       _id: court._id.toString(),
-      futsalCourtId: court.futsalCourtId.toString(),
+      venueId: court.venueId.toString(),
       courtNumber: court.courtNumber,
       name: court.name,
       size: court.size,
@@ -139,7 +176,7 @@ export class CourtRepository extends BaseRepository<ICourtDocument> {
       peakHourRate: court.peakHourRate,
       images: court.images || [],
       isActive: court.isActive,
-      isAvailable: court.isAvailable, 
+      isAvailable: court.isAvailable,
       maxPlayers: court.maxPlayers,
       openingTime: court.openingTime,
       closingTime: court.closingTime,
@@ -150,94 +187,93 @@ export class CourtRepository extends BaseRepository<ICourtDocument> {
 }
 
 /**
- * Repository for FutsalCourt entity operations
- * Extends BaseRepository for common CRUD operations
+ * Repository for FutsalVenue entity operations
  */
-export class FutsalCourtRepository extends BaseRepository<IFutsalCourtDocument> {
+export class VenueRepository extends BaseRepository<IFutsalVenueDocument> {
   constructor() {
-    super(FutsalCourtModel);
+    super(FutsalVenueModel);
   }
 
   /**
-   * Create a new futsal court
+   * Create a new venue
    */
-  async createFutsalCourt(courtData: any): Promise<FutsalCourt> {
-    const futsalCourt = await this.create(courtData);
-    return this.toFutsalCourtDTO(futsalCourt);
+  async createVenue(venueData: any, session?: any): Promise<FutsalVenue> {
+    const venue = await this.create(venueData, session);
+    return this.toVenueDTO(venue);
   }
 
   /**
-   * Find futsal court by ID
+   * Find venue by ID
    */
-  async findFutsalCourtById(futsalCourtId: string): Promise<FutsalCourt | null> {
-    const futsalCourt = await this.findById(futsalCourtId);
-    return futsalCourt ? this.toFutsalCourtDTO(futsalCourt) : null;
+  async findVenueById(venueId: string): Promise<FutsalVenue | null> {
+    const venue = await this.findById(venueId);
+    return venue ? this.toVenueDTO(venue) : null;
   }
 
   /**
-   * Find all futsal courts owned by a specific user
+   * Find all venues owned by a specific user
    */
-  async findFutsalCourtsByOwnerId(ownerId: string): Promise<FutsalCourt[]> {
-    const futsalCourts = await this.find({ ownerId } as FilterQuery<IFutsalCourtDocument>);
-    return futsalCourts.map(fc => this.toFutsalCourtDTO(fc));
+  async findVenuesByOwnerId(ownerId: string): Promise<FutsalVenue[]> {
+    const venues = await this.find({ ownerId } as FilterQuery<IFutsalVenueDocument>);
+    return venues.map(v => this.toVenueDTO(v));
   }
 
   /**
-   * Find all futsal courts with optional filters
+   * Find all venues with optional filters
    */
-  async findAllFutsalCourts(filter: FilterQuery<IFutsalCourtDocument> = {}): Promise<FutsalCourt[]> {
-    const futsalCourts = await this.find(filter);
-    return futsalCourts.map(fc => this.toFutsalCourtDTO(fc));
+  async findAllVenues(filter: FilterQuery<IFutsalVenueDocument> = {}): Promise<FutsalVenue[]> {
+    const venues = await this.find(filter);
+    return venues.map(v => this.toVenueDTO(v));
   }
 
   /**
-   * Find verified and active futsal courts (public)
+   * Find verified and active venues (public)
    */
-  async findPublicFutsalCourts(): Promise<FutsalCourt[]> {
-    const futsalCourts = await this.find({ 
+  async findPublicVenues(): Promise<FutsalVenue[]> {
+    const venues = await this.find({ 
       isVerified: true, 
       isActive: true 
-    } as FilterQuery<IFutsalCourtDocument>);
-    return futsalCourts.map(fc => this.toFutsalCourtDTO(fc));
+    } as FilterQuery<IFutsalVenueDocument>);
+    return venues.map(v => this.toVenueDTO(v));
   }
 
   /**
-   * Update futsal court by ID
+   * Update venue by ID
    */
-  async updateFutsalCourtById(futsalCourtId: string, updateData: any): Promise<FutsalCourt | null> {
-    const futsalCourt = await this.updateById(futsalCourtId, updateData);
-    return futsalCourt ? this.toFutsalCourtDTO(futsalCourt) : null;
+  async updateVenueById(venueId: string, updateData: any): Promise<FutsalVenue | null> {
+    const venue = await this.updateById(venueId, updateData);
+    return venue ? this.toVenueDTO(venue) : null;
   }
 
   /**
-   * Verify a futsal court (Admin action)
+   * Verify a venue (Admin action)
    */
-  async verifyFutsalCourt(futsalCourtId: string): Promise<FutsalCourt | null> {
-    const futsalCourt = await this.updateById(futsalCourtId, { isVerified: true } as any);
-    return futsalCourt ? this.toFutsalCourtDTO(futsalCourt) : null;
+  async verifyVenue(venueId: string): Promise<FutsalVenue | null> {
+    const venue = await this.updateById(venueId, { isVerified: true } as any);
+    return venue ? this.toVenueDTO(venue) : null;
   }
 
   /**
-   * Suspend/deactivate a futsal court
+   * Suspend/deactivate a venue
    */
-  async suspendFutsalCourt(futsalCourtId: string): Promise<FutsalCourt | null> {
-    const futsalCourt = await this.updateById(futsalCourtId, { isActive: false } as any);
-    return futsalCourt ? this.toFutsalCourtDTO(futsalCourt) : null;
+  async suspendVenue(venueId: string): Promise<FutsalVenue | null> {
+    const venue = await this.updateById(venueId, { isActive: false } as any);
+    return venue ? this.toVenueDTO(venue) : null;
   }
 
   /**
-   * Activate a futsal court
+   * Activate a venue
    */
-  async activateFutsalCourt(futsalCourtId: string): Promise<FutsalCourt | null> {
-    const futsalCourt = await this.updateById(futsalCourtId, { isActive: true } as any);
-    return futsalCourt ? this.toFutsalCourtDTO(futsalCourt) : null;
+  async activateVenue(venueId: string): Promise<FutsalVenue | null> {
+    const venue = await this.updateById(venueId, { isActive: true } as any);
+    return venue ? this.toVenueDTO(venue) : null;
   }
 
   /**
-   * Search futsal courts with filters
+   * Search venues with filters
    */
-  async searchFutsalCourts(query: FutsalCourtSearchQuery): Promise<FutsalCourt[]> {
-    const filter: FilterQuery<IFutsalCourtDocument> = {
+  async searchVenues(query: VenueSearchQuery): Promise<FutsalVenue[]> {
+    const filter: FilterQuery<IFutsalVenueDocument> = {
       isVerified: true,
       isActive: true
     } as any;
@@ -258,15 +294,15 @@ export class FutsalCourtRepository extends BaseRepository<IFutsalCourtDocument> 
       filter.rating = { $gte: query.minRating } as any;
     }
 
-    const futsalCourts = await this.find(filter);
-    return futsalCourts.map(fc => this.toFutsalCourtDTO(fc));
+    const venues = await this.find(filter);
+    return venues.map(v => this.toVenueDTO(v));
   }
 
   /**
-   * Check if futsal court exists by name and owner
+   * Check if venue exists by name and owner
    */
-  async futsalCourtExistsByName(name: string, ownerId: string, excludeId?: string): Promise<boolean> {
-    const filter: FilterQuery<IFutsalCourtDocument> = {
+  async venueExistsByName(name: string, ownerId: string, excludeId?: string): Promise<boolean> {
+    const filter: FilterQuery<IFutsalVenueDocument> = {
       name: { $regex: `^${name}$`, $options: 'i' },
       ownerId
     } as any;
@@ -279,34 +315,34 @@ export class FutsalCourtRepository extends BaseRepository<IFutsalCourtDocument> 
   }
 
   /**
-   * Delete futsal court by ID
+   * Delete venue by ID
    */
-  async deleteFutsalCourtById(futsalCourtId: string): Promise<boolean> {
-    const result = await this.deleteById(futsalCourtId);
+  async deleteVenueById(venueId: string): Promise<boolean> {
+    const result = await this.deleteById(venueId);
     return !!result;
   }
 
   /**
-   * Transform MongoDB document to FutsalCourt DTO
+   * Transform MongoDB document to Venue DTO
    */
-  private toFutsalCourtDTO(futsalCourt: IFutsalCourtDocument): FutsalCourt {
+  private toVenueDTO(venue: IFutsalVenueDocument): FutsalVenue {
     return {
-      id: futsalCourt._id.toString(),
-      _id: futsalCourt._id.toString(),
-      ownerId: futsalCourt.ownerId.toString(),
-      name: futsalCourt.name,
-      description: futsalCourt.description,
-      location: futsalCourt.location,
-      contact: futsalCourt.contact,
-      amenities: futsalCourt.amenities || [],
-      openingHours: futsalCourt.openingHours,
-      images: futsalCourt.images || [],
-      isVerified: futsalCourt.isVerified,
-      isActive: futsalCourt.isActive,
-      rating: futsalCourt.rating,
-      totalReviews: futsalCourt.totalReviews,
-      createdAt: futsalCourt.createdAt,
-      updatedAt: futsalCourt.updatedAt
+      id: venue._id.toString(),
+      _id: venue._id.toString(),
+      ownerId: venue.ownerId.toString(),
+      name: venue.name,
+      description: venue.description,
+      location: venue.location,
+      contact: venue.contact,
+      amenities: venue.amenities || [],
+      openingHours: venue.openingHours,
+      images: venue.images || [],
+      isVerified: venue.isVerified,
+      isActive: venue.isActive,
+      rating: venue.rating,
+      totalReviews: venue.totalReviews,
+      createdAt: venue.createdAt,
+      updatedAt: venue.updatedAt
     };
   }
 }
