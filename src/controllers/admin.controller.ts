@@ -175,9 +175,9 @@ export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
 });
 
 /**
- * Get all futsal courts
+ * Get all venues
  */
-export const getAllFutsalCourts = asyncHandler(async (req: Request, res: Response) => {
+export const getAllVenues = asyncHandler(async (req: Request, res: Response) => {
     const params: AdminFutsalQueryParams = {
         page: req.query.page ? Number(req.query.page) : undefined,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
@@ -192,8 +192,8 @@ export const getAllFutsalCourts = asyncHandler(async (req: Request, res: Respons
     res.status(HTTP_STATUS.OK).json(
         createResponse(
             true,
-            result.futsalCourts,
-            'Futsal courts fetched successfully',
+            result.venues,
+            'Venues fetched successfully',
             HTTP_STATUS.OK,
             result.pagination
         )
@@ -201,54 +201,54 @@ export const getAllFutsalCourts = asyncHandler(async (req: Request, res: Respons
 });
 
 /**
- * Verify futsal court
+ * Verify venue
  */
-export const verifyFutsalCourt = asyncHandler(async (req: Request, res: Response) => {
-    const { futsalCourtId } = req.params;
+export const verifyVenue = asyncHandler(async (req: Request, res: Response) => {
+    const { venueId } = req.params;
 
-    const futsalCourt = await adminService.verifyFutsalCourt(futsalCourtId);
+    const venue = await adminService.verifyVenue(venueId);
 
     res.status(HTTP_STATUS.OK).json(
         createResponse(
             true,
-            futsalCourt,
-            'Futsal court verified successfully',
+            venue,
+            'Venue verified successfully',
             HTTP_STATUS.OK
         )
     );
 });
 
 /**
- * Suspend futsal court
+ * Suspend venue
  */
-export const suspendFutsalCourt = asyncHandler(async (req: Request, res: Response) => {
-    const { futsalCourtId } = req.params;
+export const suspendVenue = asyncHandler(async (req: Request, res: Response) => {
+    const { venueId } = req.params;
 
-    const futsalCourt = await adminService.suspendFutsalCourt(futsalCourtId);
+    const venue = await adminService.suspendVenue(venueId);
 
     res.status(HTTP_STATUS.OK).json(
         createResponse(
             true,
-            futsalCourt,
-            'Futsal court suspended successfully',
+            venue,
+            'Venue suspended successfully',
             HTTP_STATUS.OK
         )
     );
 });
 
 /**
- * Reactivate futsal court
+ * Reactivate venue
  */
-export const reactivateFutsalCourt = asyncHandler(async (req: Request, res: Response) => {
-    const { futsalCourtId } = req.params;
+export const reactivateVenue = asyncHandler(async (req: Request, res: Response) => {
+    const { venueId } = req.params;
 
-    const futsalCourt = await adminService.reactivateFutsalCourt(futsalCourtId);
+    const venue = await adminService.reactivateVenue(venueId);
 
     res.status(HTTP_STATUS.OK).json(
         createResponse(
             true,
-            futsalCourt,
-            'Futsal court reactivated successfully',
+            venue,
+            'Venue reactivated successfully',
             HTTP_STATUS.OK
         )
     );
