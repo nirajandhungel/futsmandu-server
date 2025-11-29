@@ -32,7 +32,7 @@ export class BookingRepository extends BaseRepository<IBooking> {
     return this.model
       .findById(bookingId)
       .populate('courtId', 'name size hourlyRate peakHourRate')
-      .populate('futsalCourtId', 'name location')
+      .populate('venueId', 'name location')
       .populate('createdBy', 'fullName profileImage')
       .populate('players.userId', 'fullName profileImage')
       .populate('invites.userId', 'fullName profileImage')
@@ -75,8 +75,8 @@ export class BookingRepository extends BaseRepository<IBooking> {
       filter.courtId = query.courtId;
     }
 
-    if (query?.futsalCourtId) {
-      filter.futsalCourtId = query.futsalCourtId;
+    if (query?.venueId) {
+      filter.venueId = query.venueId;
     }
 
     if (query?.bookingType) {
@@ -93,6 +93,7 @@ export class BookingRepository extends BaseRepository<IBooking> {
 
   /**
    * Find public group matches (available for joining)
+   * Supports sorting and filtering by player count
    */
   async findPublicGroupMatches(query?: BookingSearchQuery): Promise<BookingDTO[]> {
     const filter: FilterQuery<IBooking> = {
@@ -115,12 +116,78 @@ export class BookingRepository extends BaseRepository<IBooking> {
       filter.courtId = query.courtId;
     }
 
-    if (query?.futsalCourtId) {
-      filter.futsalCourtId = query.futsalCourtId;
+    if (query?.venueId) {
+      filter.venueId = query.venueId;
     }
 
-    const bookings = await this.find(filter);
-    return bookings.map(booking => this.toBookingDTO(booking));
+    if (query?.bookingType) {
+      filter.bookingType = query.bookingType;
+    }
+
+    // Find bookings and apply player-based filtering
+    let bookings = await this.find(filter);
+    let bookingsDTO = bookings.map(booking => this.toBookingDTO(booking));
+
+    // Apply player count filters
+    if (query?.minPlayers !== undefined || query?.maxPlayers !== undefined || query?.availableSlots !== undefined) {
+      bookingsDTO = bookingsDTO.filter(booking => {
+        const activePlayers = booking.players.filter(p => p.status === 'active').length;
+        const availableSlots = booking.maxPlayers - activePlayers;
+
+        if (query.minPlayers !== undefined && activePlayers < query.minPlayers) {
+          return false;
+        }
+        if (query.maxPlayers !== undefined && activePlayers > query.maxPlayers) {
+          return false;
+        }
+        if (query.availableSlots !== undefined && availableSlots < query.availableSlots) {
+          return false;
+        }
+        return true;
+      });
+    }
+
+    // Apply sorting
+    if (query?.sortBy) {
+      const sortOrder = query.sortOrder === 'asc' ? 1 : -1;
+      
+      bookingsDTO.sort((a, b) => {
+        switch (query.sortBy) {
+          case 'players': {
+            const aPlayers = a.players.filter(p => p.status === 'active').length;
+            const bPlayers = b.players.filter(p => p.status === 'active').length;
+            return (aPlayers - bPlayers) * sortOrder;
+          }
+          case 'date': {
+            const aDate = new Date(a.date).getTime();
+            const bDate = new Date(b.date).getTime();
+            return (aDate - bDate) * sortOrder;
+          }
+          case 'time': {
+            const aTime = this.timeToMinutes(a.startTime);
+            const bTime = this.timeToMinutes(b.startTime);
+            return (aTime - bTime) * sortOrder;
+          }
+          case 'createdAt': {
+            const aCreated = new Date(a.createdAt || 0).getTime();
+            const bCreated = new Date(b.createdAt || 0).getTime();
+            return (aCreated - bCreated) * sortOrder;
+          }
+          default:
+            return 0;
+        }
+      });
+    }
+
+    return bookingsDTO;
+  }
+
+  /**
+   * Helper: Convert time string to minutes for sorting
+   */
+  private timeToMinutes(time: string): number {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + (minutes || 0);
   }
 
   /**
@@ -241,10 +308,10 @@ export class BookingRepository extends BaseRepository<IBooking> {
   }
 
   /**
-   * Find bookings by owner (through futsal court)
+   * Find bookings by owner (through venue)
    */
   async findBookingsByOwner(ownerId: string, query?: BookingSearchQuery): Promise<BookingDTO[]> {
-    // This requires populating futsalCourtId first, so we'll use aggregation
+    // This requires populating venueId first, so we'll use aggregation
     const filter: any = {};
 
     if (query?.status) {
@@ -262,13 +329,13 @@ export class BookingRepository extends BaseRepository<IBooking> {
     const bookings = await this.model
       .find(filter)
       .populate({
-        path: 'futsalCourtId',
+        path: 'venueId',
         match: { ownerId }
       })
       .exec();
 
-    // Filter out bookings where futsalCourtId doesn't match owner
-    const filtered = bookings.filter(b => b.futsalCourtId && (b.futsalCourtId as any).ownerId?.toString() === ownerId);
+    // Filter out bookings where venueId doesn't match owner
+    const filtered = bookings.filter(b => b.venueId && (b.venueId as any).ownerId?.toString() === ownerId);
     return filtered.map(booking => this.toBookingDTO(booking));
   }
 
@@ -280,7 +347,7 @@ export class BookingRepository extends BaseRepository<IBooking> {
       id: booking._id.toString(),
       _id: booking._id.toString(),
       courtId: booking.courtId.toString(),
-      futsalCourtId: booking.futsalCourtId.toString(),
+      venueId: booking.venueId.toString(),
       createdBy: booking.createdBy.toString(),
       date: booking.date,
       startTime: booking.startTime,
