@@ -1,9 +1,9 @@
 import { Schema, model, Document, Types } from 'mongoose';
 
-// Define separate interfaces for Mongoose documents
+// ==================== COURT DOCUMENT INTERFACE ====================
 export interface ICourtDocument extends Document {
-  _id:Types.ObjectId;
-  futsalCourtId: Types.ObjectId;
+  _id: Types.ObjectId;
+  venueId: Types.ObjectId;
   courtNumber: string;
   name: string;
   size: '5v5' | '6v6' | '7v7';
@@ -12,7 +12,7 @@ export interface ICourtDocument extends Document {
   peakHourRate: number;
   images: string[];
   isActive: boolean;
-  isAvailable:boolean,
+  isAvailable: boolean;
   maxPlayers: number;
   openingTime: string;
   closingTime: string;
@@ -20,8 +20,9 @@ export interface ICourtDocument extends Document {
   updatedAt: Date;
 }
 
-export interface IFutsalCourtDocument extends Document {
-  _id:Types.ObjectId;
+// ==================== VENUE DOCUMENT INTERFACE ====================
+export interface IFutsalVenueDocument extends Document {
+  _id: Types.ObjectId;
   ownerId: Types.ObjectId;
   name: string;
   description: string;
@@ -57,10 +58,11 @@ export interface IFutsalCourtDocument extends Document {
   updatedAt: Date;
 }
 
+// ==================== COURT SCHEMA ====================
 const courtSchema = new Schema<ICourtDocument>({
-  futsalCourtId: {
+  venueId: {
     type: Schema.Types.ObjectId,
-    ref: 'FutsalCourt',
+    ref: 'FutsalVenue',
     required: true
   },
   courtNumber: {
@@ -96,9 +98,9 @@ const courtSchema = new Schema<ICourtDocument>({
     type: Boolean,
     default: true
   },
-  isAvailable:{
-    type:Boolean,
-    default:true,
+  isAvailable: {
+    type: Boolean,
+    default: true,
   },
   maxPlayers: {
     type: Number,
@@ -118,7 +120,8 @@ const courtSchema = new Schema<ICourtDocument>({
   timestamps: true
 });
 
-const futsalCourtSchema = new Schema<IFutsalCourtDocument>({
+// ==================== VENUE SCHEMA ====================
+const futsalVenueSchema = new Schema<IFutsalVenueDocument>({
   ownerId: {
     type: Schema.Types.ObjectId,
     ref: 'User',
@@ -136,15 +139,15 @@ const futsalCourtSchema = new Schema<IFutsalCourtDocument>({
   location: {
     address: { type: String, required: true },
     city: { type: String, required: true },
-    state: { type: String, required: true },
+    state: { type: String, required: false },
     coordinates: {
-      latitude: { type: Number, required: true },
-      longitude: { type: Number, required: true }
+      latitude: { type: Number, required: false },
+      longitude: { type: Number, required: false }
     }
   },
   contact: {
     phone: { type: String, required: true },
-    email: { type: String, required: true }
+    email: { type: String, required: false }
   },
   amenities: [{
     type: String
@@ -183,12 +186,14 @@ const futsalCourtSchema = new Schema<IFutsalCourtDocument>({
   timestamps: true
 });
 
-// Indexes for efficient queries
-courtSchema.index({ futsalCourtId: 1, courtNumber: 1 }, { unique: true });
+// ==================== INDEXES ====================
+courtSchema.index({ venueId: 1, courtNumber: 1 }, { unique: true });
 courtSchema.index({ isActive: 1 });
-futsalCourtSchema.index({ ownerId: 1 });
-futsalCourtSchema.index({ 'location.coordinates': '2dsphere' });
-futsalCourtSchema.index({ isVerified: 1, isActive: 1 });
+courtSchema.index({ venueId: 1 });
+futsalVenueSchema.index({ ownerId: 1 });
+futsalVenueSchema.index({ 'location.coordinates': '2dsphere' });
+futsalVenueSchema.index({ isVerified: 1, isActive: 1 });
 
+// ==================== EXPORTS ====================
 export const CourtModel = model<ICourtDocument>('Court', courtSchema);
-export const FutsalCourtModel = model<IFutsalCourtDocument>('FutsalCourt', futsalCourtSchema);
+export const FutsalVenueModel = model<IFutsalVenueDocument>('FutsalVenue', futsalVenueSchema);
