@@ -21,7 +21,7 @@ export interface Booking {
   id?: string;
   _id?: string;
   courtId: string;
-  futsalCourtId: string;
+  venueId: string;
   createdBy: string;
   date: Date;
   startTime: string;
@@ -86,7 +86,7 @@ export interface BookingWithDetails extends Booking {
     hourlyRate: number;
     peakHourRate?: number;
   };
-  futsalCourt?: {
+  venue?: {
     id: string;
     name: string;
     location: {
@@ -123,13 +123,18 @@ export interface BookingListResponse {
 export interface BookingSearchQuery {
   userId?: string;
   courtId?: string;
-  futsalCourtId?: string;
+  venueId?: string;
   status?: BookingStatus;
   date?: string;
   startDate?: string;
   endDate?: string;
   bookingType?: BookingType;
   groupType?: 'public' | 'private';
+  minPlayers?: number; // Filter by minimum current players
+  maxPlayers?: number; // Filter by maximum current players
+  availableSlots?: number; // Filter by available slots (needed players)
+  sortBy?: 'players' | 'date' | 'time' | 'createdAt'; // Sort field
+  sortOrder?: 'asc' | 'desc'; // Sort order
   page?: number;
   limit?: number;
 }
@@ -145,16 +150,21 @@ export interface GroupMatch {
   currentPlayers: number;
   maxPlayers: number;
   groupType: 'public' | 'private';
+  bookingType?: BookingType;
   status: BookingStatus;
   courtName: string;
-  futsalCourtName: string;
+  venueName: string;
   location: {
     address: string;
     city: string;
   };
   hourlyRate: number;
+  peakHourRate?: number;
   creatorName: string;
+  creatorId?: string;
   availableSlots: number;
+  totalAmount?: number;
+  createdAt?: Date;
 }
 
 export interface GroupMatchListResponse {
