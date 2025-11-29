@@ -7,6 +7,7 @@ export enum UserRole{
 export enum UserMode{
     PLAYER = 'PLAYER',
     OWNER = 'OWNER',
+    ADMIN = 'ADMIN'
 }
 
 export enum OwnerVerificationStatus{
