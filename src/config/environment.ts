@@ -31,6 +31,10 @@ const envSchema = Joi.object({
     CLOUDINARY_API_SECRET:Joi.string().required(),
     CLOUDINARY_UPLOAD_PRESET:Joi.string().optional(),
     CLOUDINARY_BASE_FOLDER:Joi.string().default('futsmandu'),
+
+    SEED_ADMIN_EMAIL: Joi.string().email().required(),
+    SEED_ADMIN_PASSWORD: Joi.string().required(),
+
 }).unknown();
 
 const {error, value:envVars} = envSchema.validate(process.env);
@@ -82,6 +86,11 @@ export const config={
         uploadPreset:envVars.CLOUDINARY_UPLOAD_PRESET,
         baseFolder:envVars.CLOUDINARY_BASE_FOLDER,
     },
+    seedAdmin: {
+    email: envVars.SEED_ADMIN_EMAIL,
+    password: envVars.SEED_ADMIN_PASSWORD,
+}
+
 
 }
 
