@@ -19,7 +19,7 @@ export interface IBookingInvite extends Document {
 export interface IBooking extends Document {
   _id: Types.ObjectId;
   courtId: Types.ObjectId;
-  futsalCourtId: Types.ObjectId;
+  venueId: Types.ObjectId;
   createdBy: Types.ObjectId;
   date: Date;
   startTime: string;
@@ -93,9 +93,9 @@ const BookingSchema = new Schema<IBooking>({
     ref: 'Court',
     required: true
   },
-  futsalCourtId: {
+  venueId: {
     type: Schema.Types.ObjectId,
-    ref: 'FutsalCourt',
+    ref: 'FutsalVenue',
     required: true
   },
   createdBy: {
