@@ -3,7 +3,7 @@ import App from './src/app.js';
 import { config } from './src/config/environment.js';
 import { connectDatabase, disconnectDatabase } from './src/config/database.js';
 import logger from './src/utils/logger.js';
-import { createDefaultAdmin } from '@/seeders/createDefaultAdmin.js';
+import { createDefaultAdmin } from './src/seeders/createDefaultAdmin.js';
 
 class Server {
   private readonly appInstance: App;
