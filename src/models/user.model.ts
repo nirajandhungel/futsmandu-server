@@ -57,11 +57,12 @@ const UserSchema = new Schema<IUser>(
             default: UserMode.PLAYER,
         },
         ownerProfile: {
+            panNumber: { type: String, trim: true },
+            address: { type: String, trim: true },
+            phoneNumber:{type:String, trim:true},
             profilePhotoUrl: { type: String },
             citizenshipFrontUrl: { type: String },
             citizenshipBackUrl: { type: String },
-            panNumber: { type: String, trim: true },
-            address: { type: String, trim: true },
             additionalKyc: {
                 type: Map,
                 of: String,
