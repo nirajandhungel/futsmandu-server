@@ -238,7 +238,8 @@ All user endpoints require authentication.
 ```
 panNumber: "123456789"
 address: "123 Main Street, Kathmandu"
-additionalKyc: {"field1": "value1"} (optional, can be JSON string)
+phoneNumber:"9876543210"
+additionalKyc: {"fullName": "value1","bankName":"value2","bankAccountNumber":"value3","citizenshipNumber":""} (optional, can be JSON string)
 profilePhoto: [File] (required)
 citizenshipFront: [File] (required)
 citizenshipBack: [File] (required)
