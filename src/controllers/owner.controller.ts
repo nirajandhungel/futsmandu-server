@@ -59,6 +59,19 @@ export const deactivateOwnerMode = asyncHandler(async (req: Request, res: Respon
         )
     );
 });
+// activate-player-mode
+export const activatePlayerMode = asyncHandler(async (req: Request, res: Response) => {
+    const result = await ownerService.activatePlayerMode(req.user!.id);
+
+    res.status(HTTP_STATUS.OK).json(
+        createResponse(
+            true,
+            result,
+            'Owner mode disabled. You are back in player mode.',
+            HTTP_STATUS.OK
+        )
+    );
+});
 
 export const getOwnerProfile = asyncHandler(async (req: Request, res: Response) => {
     const profile = await ownerService.getOwnerProfile(req.user!.id);
