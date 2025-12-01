@@ -48,6 +48,14 @@ export class CourtRepository extends BaseRepository<ICourtDocument> {
     return court ? this.toCourtDTO(court) : null;
   }
 
+    /**
+   * Find all courts with optional filters
+   */
+  async findAllCourts(filter: FilterQuery<ICourtDocument> = {}): Promise<Court[]> {
+    const courts = await this.find(filter);
+    return courts.map(v => this.toCourtDTO(v));
+  }
+
   /**
    * Find all courts for a specific venue
    */

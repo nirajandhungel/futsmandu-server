@@ -16,6 +16,7 @@ router.get('/public/venues', courtController.getAllVenues);
 router.get('/public/venues/:venueId', courtController.getVenueById);
 router.get('/public/venues/:venueId/courts', courtController.getVenueWithCourts);
 router.get('/public/courts/:courtId', courtController.getCourtById);
+router.get('/public/courts', courtController.getAllCourts);
 router.get('/public/courts/:courtId/availability', courtController.getCourtAvailability);
 
 // ==================== OWNER ROUTES ====================

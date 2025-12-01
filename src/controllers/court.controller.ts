@@ -317,6 +317,23 @@ export class CourtController {
       HTTP_STATUS.OK
     );
   });
+  
+  getAllCourts= asyncHandler(async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    // const { courtId } = req.params;
+
+    const court = await this.courtService.getAllCourts();
+
+    sendSuccess(
+      res,
+      { court },
+      'Court details retrieved successfully',
+      HTTP_STATUS.OK
+    );
+  });
 
   /**
    * Get court availability for a specific date

@@ -582,6 +582,18 @@ export class CourtService {
 
     return court;
   }
+  async getAllCourts(): Promise<Court[]> {
+    const courts = await this.courtRepository.findAllCourts();
+
+    if (!courts) {
+      throw new NotFoundError(
+        ERROR_MESSAGES[ERROR_CODES.COURT_NOT_FOUND],
+        ERROR_CODES.COURT_NOT_FOUND,
+      );
+    }
+
+    return courts;
+  }
 
   /**
    * Get court availability for a specific date (Public)
