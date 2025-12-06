@@ -24,7 +24,7 @@ export class OwnerService {
         this.bookingRepository = new BookingRepository();
     }
 
-    
+
 
     async activateOwnerMode(
         userId: string,
@@ -36,10 +36,10 @@ export class OwnerService {
             throw new NotFoundError('User');
         }
 
-    // Add null checks for payload
-    if (!payload) {
-        throw new ValidationError('Payload is required');
-    }
+        // Add null checks for payload
+        if (!payload) {
+            throw new ValidationError('Payload is required');
+        }
 
         const profilePhoto = this.pickFile(files, 'profilePhoto');
         const citizenshipFront = this.pickFile(files, 'citizenshipFront');
@@ -53,7 +53,7 @@ export class OwnerService {
             uploadImageBuffer(citizenshipBack, { folder, publicId: 'citizenship-back' }),
         ]);
 
-        const additionalKyc =  payload.additionalKyc ? this.normalizeAdditionalKyc(payload.additionalKyc):undefined;
+        const additionalKyc = payload.additionalKyc ? this.normalizeAdditionalKyc(payload.additionalKyc) : undefined;
 
         user.ownerProfile = {
             ...user.ownerProfile,
@@ -81,7 +81,7 @@ export class OwnerService {
         };
     }
 
-    
+
 
     // async activateOwnerMode(
     //     userId: string,
@@ -194,26 +194,26 @@ export class OwnerService {
     }
 
     private normalizeAdditionalKyc(
-    data: OwnerActivationDto['additionalKyc']
-): Record<string, string> | undefined {
-    if (!data) return undefined;
+        data: OwnerActivationDto['additionalKyc']
+    ): Record<string, string> | undefined {
+        if (!data) return undefined;
 
-    try {
-        // Handle both string JSON and object cases
-        const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
-        
-        if (typeof parsedData === 'object' && !Array.isArray(parsedData) && parsedData !== null) {
-            return Object.entries(parsedData).reduce<Record<string, string>>((acc, [key, value]) => {
-                acc[key] = String(value ?? '');
-                return acc;
-            }, {});
+        try {
+            // Handle both string JSON and object cases
+            const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+
+            if (typeof parsedData === 'object' && !Array.isArray(parsedData) && parsedData !== null) {
+                return Object.entries(parsedData).reduce<Record<string, string>>((acc, [key, value]) => {
+                    acc[key] = String(value ?? '');
+                    return acc;
+                }, {});
+            }
+
+            return undefined;
+        } catch (error) {
+            throw new ValidationError('Invalid additionalKyc format');
         }
-        
-        return undefined;
-    } catch (error) {
-        throw new ValidationError('Invalid additionalKyc format');
     }
-}
 
     /**
      * Create a new venue with courts
@@ -221,7 +221,7 @@ export class OwnerService {
      * Applies smart defaults for courts and handles image uploads
      */
     async createVenue(
-        userId: string, 
+        userId: string,
         venueData: CreateFutsalVenueRequest,
         venueImages?: Express.Multer.File[],
         courtImagesMap?: { [courtIndex: number]: Express.Multer.File[] }
@@ -236,10 +236,10 @@ export class OwnerService {
 
         // Upload venue images to Cloudinary if provided
         if (venueImages && venueImages.length > 0) {
-            const uploadPromises = venueImages.map((image, index) => 
-                uploadImageBuffer(image, { 
-                    folder: baseFolder, 
-                    publicId: `venue-image-${Date.now()}-${index}` 
+            const uploadPromises = venueImages.map((image, index) =>
+                uploadImageBuffer(image, {
+                    folder: baseFolder,
+                    publicId: `venue-image-${Date.now()}-${index}`
                 })
             );
 
@@ -259,10 +259,10 @@ export class OwnerService {
                 let courtImageUrls: string[] = [];
                 if (courtImagesMap && courtImagesMap[index] && courtImagesMap[index].length > 0) {
                     const courtFolder = `${baseFolder}/courts/court-${index}`;
-                    const uploadPromises = courtImagesMap[index].map((image, imgIndex) => 
-                        uploadImageBuffer(image, { 
-                            folder: courtFolder, 
-                            publicId: `court-image-${Date.now()}-${imgIndex}` 
+                    const uploadPromises = courtImagesMap[index].map((image, imgIndex) =>
+                        uploadImageBuffer(image, {
+                            folder: courtFolder,
+                            publicId: `court-image-${Date.now()}-${imgIndex}`
                         })
                     );
 
@@ -272,7 +272,7 @@ export class OwnerService {
 
                 // Apply smart defaults
                 const courtWithDefaults = this.applyCourtDefaults(court, venueData.openingHours);
-                
+
                 return {
                     ...courtWithDefaults,
                     images: courtImageUrls.length > 0 ? courtImageUrls : (court.images || [])

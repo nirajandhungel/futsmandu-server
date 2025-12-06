@@ -17,7 +17,7 @@ export const activateOwnerMode = asyncHandler(async (req: Request, res: Response
 
     console.log('Request body:', req.body);
     console.log('Request files:', req.files);
-     // Parse additionalKyc if it's a string
+    // Parse additionalKyc if it's a string
     let additionalKyc = undefined;
     if (req.body.additionalKyc && typeof req.body.additionalKyc === 'string') {
         try {
@@ -93,22 +93,22 @@ export const getOwnerProfile = asyncHandler(async (req: Request, res: Response) 
  */
 export const createVenue = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
-    
+
     logger.info('📍 Received venue creation request', {
         userId,
         bodyKeys: Object.keys(req.body),
         filesCount: req.files ? (Array.isArray(req.files) ? req.files.length : Object.keys(req.files).length) : 0
     });
-    
+
     // Parse FormData body into structured object
     const parsedBody = parseFormData(req.body);
-    
+
     logger.debug('📍 Parsed FormData body', {
         parsedKeys: Object.keys(parsedBody),
         courtsCount: parsedBody.courts?.length || 0,
         hasAmenities: !!parsedBody.amenities
     });
-    
+
     // Helper to parse amenities (can be string, array, or comma-separated string)
     const parseAmenities = (amenities: any): string[] => {
         if (!amenities) return [];
@@ -130,13 +130,13 @@ export const createVenue = asyncHandler(async (req: Request, res: Response) => {
         openingHours: parsedBody.openingHours,
         courts: parsedBody.courts || []
     };
-    
+
     logger.debug('📍 Venue data extracted', {
         venueName: venueData.name,
         amenitiesCount: venueData.amenities?.length || 0,
         courtsCount: venueData.courts.length
     });
-    
+
     // Parse amenities for each court as well
     if (venueData.courts && Array.isArray(venueData.courts)) {
         venueData.courts = venueData.courts.map((court, index) => {
@@ -144,7 +144,7 @@ export const createVenue = asyncHandler(async (req: Request, res: Response) => {
                 ...court,
                 amenities: parseAmenities(court.amenities)
             };
-            
+
             logger.debug('📍 Court data parsed', {
                 courtIndex: index,
                 courtNumber: parsedCourt.courtNumber,
@@ -153,11 +153,11 @@ export const createVenue = asyncHandler(async (req: Request, res: Response) => {
                 hourlyRate: parsedCourt.hourlyRate,
                 amenitiesCount: parsedCourt.amenities?.length || 0
             });
-            
+
             return parsedCourt;
         });
     }
-    
+
     logger.info('📍 Venue data prepared for service', {
         venueName: venueData.name,
         courtsCount: venueData.courts.length,
@@ -168,14 +168,14 @@ export const createVenue = asyncHandler(async (req: Request, res: Response) => {
             hourlyRate: c.hourlyRate
         }))
     });
-    
+
     // Handle files from multer
     const files = req.files as Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] } | undefined;
-    
+
     // Separate venue images and court images
     let venueImages: Express.Multer.File[] = [];
     const courtImagesMap: { [courtIndex: number]: Express.Multer.File[] } = {};
-    
+
     if (files) {
         if (Array.isArray(files)) {
             // If files is an array, all are venue images (legacy support)
@@ -185,7 +185,7 @@ export const createVenue = asyncHandler(async (req: Request, res: Response) => {
             if (files['venueImages']) {
                 venueImages = Array.isArray(files['venueImages']) ? files['venueImages'] : [files['venueImages']];
             }
-            
+
             // Extract court images (courtImages[0], courtImages[1], etc.)
             for (const [fieldname, fileArray] of Object.entries(files)) {
                 const courtImageMatch = fieldname.match(/^courtImages\[(\d+)\]$/);
@@ -198,7 +198,7 @@ export const createVenue = asyncHandler(async (req: Request, res: Response) => {
     }
 
     const venue = await ownerService.createVenue(
-        userId, 
+        userId,
         venueData,
         venueImages,
         courtImagesMap

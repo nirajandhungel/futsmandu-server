@@ -2,9 +2,9 @@ import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware.js';
 import { ownerDocumentsUpload, futsalCourtImagesUpload, venueCreationUpload } from '../middleware/upload.middleware.js';
 import { validateRequest, validationSchemas } from '../middleware/validation.middleware.js';
-import { 
-  activateOwnerMode, 
-  deactivateOwnerMode, 
+import {
+  activateOwnerMode,
+  deactivateOwnerMode,
   getOwnerProfile,
   createVenue,
   getDashboard,
