@@ -72,6 +72,9 @@ export interface FutsalVenue {
   isActive: boolean;
   rating: number;
   totalReviews: number;
+  courts?:Court[];
+  totalCourts?: number;
+  activeCourts?: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -221,7 +224,7 @@ export interface CourtWithVenue extends Court {
 }
 
 export interface FutsalVenueWithCourts extends FutsalVenue {
-  courts?: Court[];
+  courts: Court[];
   totalCourts?: number;
   activeCourts?: number;
 }

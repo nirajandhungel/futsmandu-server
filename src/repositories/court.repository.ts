@@ -231,7 +231,18 @@ export class VenueRepository extends BaseRepository<IFutsalVenueDocument> {
    */
   async findAllVenues(filter: FilterQuery<IFutsalVenueDocument> = {}): Promise<FutsalVenue[]> {
     const venues = await this.find(filter);
-    return venues.map(v => this.toVenueDTO(v));
+    const venueIds = venues.map(v => v._id);
+
+    const courts = await CourtModel.find({ venueId: { $in: venueIds } });
+
+    return venues.map(venue => {
+    const venueCourts = courts.filter(c => c.venueId.toString() === venue._id.toString());
+
+    return {
+      ...this.toVenueDTO(venue),
+      courts: venueCourts.map(c => this.toCourtDTO(c))};
+  });
+    // return venues.map(v => this.toVenueDTO(v));
   }
 
   /**
@@ -333,7 +344,7 @@ export class VenueRepository extends BaseRepository<IFutsalVenueDocument> {
   /**
    * Transform MongoDB document to Venue DTO
    */
-  private toVenueDTO(venue: IFutsalVenueDocument): FutsalVenue {
+  private toVenueDTO(venue: IFutsalVenueDocument, venueCourts: ICourtDocument[] = []): FutsalVenue {
     return {
       id: venue._id.toString(),
       _id: venue._id.toString(),
@@ -350,7 +361,34 @@ export class VenueRepository extends BaseRepository<IFutsalVenueDocument> {
       rating: venue.rating,
       totalReviews: venue.totalReviews,
       createdAt: venue.createdAt,
-      updatedAt: venue.updatedAt
+      updatedAt: venue.updatedAt,
+      courts: venueCourts.map(c => this.toCourtDTO(c)),
+      totalCourts: venueCourts.length,
+
     };
   }
+
+
+
+  private toCourtDTO(court: ICourtDocument) {
+    return {
+      id: court._id.toString(),
+      venueId: court.venueId.toString(),
+      courtNumber: court.courtNumber,
+      name: court.name,
+      size: court.size,
+      amenities: court.amenities,
+      hourlyRate: court.hourlyRate,
+      peakHourRate: court.peakHourRate,
+      images: court.images,
+      isActive: court.isActive,
+      isAvailable: court.isAvailable,
+      maxPlayers: court.maxPlayers,
+      openingTime: court.openingTime,
+      closingTime: court.closingTime,
+      createdAt: court.createdAt,
+      updatedAt: court.updatedAt
+    };
+  }
+
 }
