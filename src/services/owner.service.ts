@@ -154,14 +154,32 @@ export class OwnerService {
             tokens,
         };
     }
-    // activate-player-mode
-    async activatePlayerMode(userId: string): Promise<ModeSwitchResponse> {
+    // use-player-mode
+    async usePlayerMode(userId: string): Promise<ModeSwitchResponse> {
         const user = await this.userRepository.findById(userId);
         if (!user) {
             throw new NotFoundError('User');
         }
 
         user.mode = UserMode.PLAYER;
+        await user.save();
+
+        const tokens = this.authService.generateUserTokens(user);
+        await this.userRepository.updateRefreshToken(user._id.toString(), tokens.refreshToken);
+
+        return {
+            user: this.authService.toPublicUser(user),
+            tokens,
+        };
+    }
+    // activate-player-mode
+    async useOwnerMode(userId: string): Promise<ModeSwitchResponse> {
+        const user = await this.userRepository.findById(userId);
+        if (!user) {
+            throw new NotFoundError('User');
+        }
+
+        user.mode = UserMode.OWNER;
         await user.save();
 
         const tokens = this.authService.generateUserTokens(user);

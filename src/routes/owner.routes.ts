@@ -11,7 +11,8 @@ import {
   approveBooking,
   completeBooking,
   rejectBooking,
-  activatePlayerMode
+  usePlayerMode,
+  useOwnerMode
 } from '../controllers/owner.controller.js';
 import { requireMode } from '../middleware/mode.middleware.js';
 import { UserMode, UserRole } from '../types/common.types.js';
@@ -64,8 +65,14 @@ router.post(
 router.post(
   '/player-mode',
   requireMode([UserMode.OWNER]),
-  validateRequest(validationSchemas.ownerDeactivate),
-  activatePlayerMode
+  // validateRequest(validationSchemas.playerMode),
+  usePlayerMode
+);
+router.post(
+  '/owner-mode',
+  requireMode([UserMode.OWNER]),
+  // validateRequest(validationSchemas.ownerMode),
+  useOwnerMode
 );
 
 // ==================== BOOKING MANAGEMENT ====================
