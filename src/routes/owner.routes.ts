@@ -70,7 +70,7 @@ router.post(
 );
 router.post(
   '/owner-mode',
-  requireMode([UserMode.OWNER]),
+  requireMode([UserMode.PLAYER]),
   // validateRequest(validationSchemas.ownerMode),
   useOwnerMode
 );
