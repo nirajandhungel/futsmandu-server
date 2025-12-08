@@ -88,6 +88,19 @@ export class NotificationService {
       metadata
     });
   }
+  /**
+   * Helper: Create booking confirmed notification
+   */
+  async notifyBookingCompleted(userId: string, bookingId: string, metadata?: Record<string, any>) {
+    return this.createNotification({
+      userId,
+      type: NotificationType.BOOKING_CONFIRMED,
+      title: 'Booking Completed',
+      message: 'Your booking has been completed by the owner.',
+      relatedBookingId: bookingId,
+      metadata
+    });
+  }
 
   /**
    * Helper: Create player joined notification

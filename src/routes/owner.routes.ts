@@ -9,6 +9,7 @@ import {
   createVenue,
   getDashboard,
   approveBooking,
+  completeBooking,
   rejectBooking,
   activatePlayerMode
 } from '../controllers/owner.controller.js';
@@ -72,6 +73,11 @@ router.patch(
   '/bookings/:id/approve',
   requireMode([UserMode.OWNER]),
   approveBooking
+);
+router.patch(
+  '/bookings/:id/complete',
+  requireMode([UserMode.OWNER]),
+  completeBooking
 );
 
 router.patch(

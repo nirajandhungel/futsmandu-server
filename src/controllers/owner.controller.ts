@@ -286,3 +286,28 @@ export const rejectBooking = asyncHandler(async (req: Request, res: Response) =>
     );
 });
 
+
+//   complete a booking
+//  PATCH /api/owner/bookings/:id/complete
+//  
+
+
+
+export const completeBooking = asyncHandler(async (req: Request, res: Response) => {
+    const { id: bookingId } = req.params;
+    const ownerId = req.user!.id;
+
+    const booking = await bookingService.completeBooking(ownerId, bookingId);
+
+    logger.info('Booking completed  by owner', { bookingId, ownerId });
+
+    res.status(HTTP_STATUS.OK).json(
+        createResponse(
+            true,
+            { booking },
+            'Booking completed successfully',
+            HTTP_STATUS.OK
+        )
+    );
+});
+

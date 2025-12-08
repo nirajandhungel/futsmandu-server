@@ -693,6 +693,48 @@ export class BookingService {
 
     return updatedBooking;
   }
+  /**
+   * Complete a booking (Owner only)
+   */
+  async completeBooking(ownerId: string, bookingId: string): Promise<BookingWithDetails> {
+    const booking = await this.bookingRepository.findBookingById(bookingId);
+    if (!booking) {
+      throw new NotFoundError(
+        ERROR_MESSAGES[ERROR_CODES.BOOKING_NOT_FOUND],
+        ERROR_CODES.BOOKING_NOT_FOUND,
+        { bookingId }
+      );
+    }
+
+    // Verify ownership
+    const venue = await this.venueRepository.findVenueById(booking.venueId);
+    if (!venue || venue.ownerId !== ownerId) {
+      throw new AuthorizationError(
+        ERROR_MESSAGES[ERROR_CODES.AUTH_INSUFFICIENT_PERMISSIONS],
+        ERROR_CODES.AUTH_INSUFFICIENT_PERMISSIONS,
+        { reason: 'You can only complete bookings for your own futsal courts' }
+      );
+    }
+
+    // Update booking
+    await this.bookingRepository.updateBookingById(bookingId, {
+      bookingCompleted: true,
+      bookingCompletedAt: new Date(),
+      status: BookingStatus.COMPLETED
+    });
+
+    // Notify all players
+    const updatedBooking = await this.getBookingWithDetails(bookingId);
+    for (const player of updatedBooking.players) {
+      if (player.status === 'active') {
+        await this.notificationService.notifyBookingCompleted(player.userId, bookingId);
+      }
+    }
+
+    logger.info('Booking completed by owner', { bookingId, ownerId });
+
+    return updatedBooking;
+  }
 
   /**
    * Reject a booking (Owner only)
