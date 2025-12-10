@@ -10,6 +10,7 @@ import { uploadImageBuffer } from '../utils/cloudinary.js';
 import { config } from '../config/environment.js';
 import { OwnerVerificationStatus, UserMode, UserRole, BookingStatus } from '../types/common.types.js';
 import logger from '../utils/logger.js';
+import { getOwnerVenues } from '@/controllers/owner.controller.js';
 
 export class OwnerService {
     private userRepository: UserRepository;
@@ -474,6 +475,21 @@ export class OwnerService {
                     : 0
             }
         };
+    }
+    /**
+     * Get owner dashboard analytics
+     */
+    async getOwnerVenues(ownerId: string) {
+        // Get all venues owned by user
+        const { venues, courts } = await this.courtService.getOwnerVenues(ownerId);
+        // const venueIds = venues.map(v => v.id!);
+
+        
+        logger.info('Dashboard analytics retrieved', { ownerId, venues });
+
+        return {
+            venues
+        }
     }
 }
 
