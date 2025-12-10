@@ -24,6 +24,7 @@ import { ERROR_CODES, ERROR_MESSAGES } from '../config/constants.js';
 import { BookingStatus, BookingType } from '../types/common.types.js';
 import { NotificationType } from '../models/notification.model.js';
 import logger from '../utils/logger.js';
+import { CourtService } from './court.service.js';
 
 export class BookingService {
   private bookingRepository: BookingRepository;
@@ -651,6 +652,62 @@ export class BookingService {
     return hour >= 18 && hour < 22;
   }
 
+  // get owner venue bookings
+
+  async ownerVenueBookings(ownerId: string, query?: BookingSearchQuery): Promise<BookingWithDetails[]> {
+    logger.debug('Fetching owner venue bookings', { ownerId });
+    
+    // First, get all venues owned by this owner
+    const venues = await this.venueRepository.findVenuesByOwnerId(ownerId);
+    
+    if (!venues || venues.length === 0) {
+      return []; // No venues, no bookings
+    }
+
+    // Get venue IDs (filter out any undefined/null IDs)
+    const venueIds = venues
+      .map(venue => venue.id)
+      .filter((id): id is string => Boolean(id));
+
+    if (venueIds.length === 0) {
+      return [];
+    }
+
+    // Find bookings for all these venues
+    const bookings = await this.bookingRepository.findBookingsByVenueIds(venueIds, query);
+
+    // Apply additional sorting if requested
+    let sortedBookings = bookings;
+    if (query?.sortBy) {
+      sortedBookings = bookings.sort((a, b) => {
+        const sortOrder = query.sortOrder === 'asc' ? 1 : -1;
+
+        switch (query.sortBy) {
+          case 'date': {
+            const aDate = new Date(a.date).getTime();
+            const bDate = new Date(b.date).getTime();
+            return (aDate - bDate) * sortOrder;
+          }
+          case 'createdAt': {
+            const aCreated = new Date(a.createdAt || 0).getTime();
+            const bCreated = new Date(b.createdAt || 0).getTime();
+            return (aCreated - bCreated) * sortOrder;
+          }
+          default:
+            return 0;
+        }
+      });
+    } else {
+      // Default sorting by date (most recent first)
+      sortedBookings = bookings.sort((a, b) => {
+        const aDate = new Date(a.date).getTime();
+        const bDate = new Date(b.date).getTime();
+        return bDate - aDate; // Descending (newest first)
+      });
+    }
+
+    return Promise.all(sortedBookings.map(b => this.getBookingWithDetails(b.id!)));
+  }
   /**
    * Approve a booking (Owner only)
    */

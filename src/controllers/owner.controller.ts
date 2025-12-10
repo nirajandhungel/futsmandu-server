@@ -277,6 +277,26 @@ export const getOwnerVenues = asyncHandler(async (req: Request, res: Response) =
  * Approve a booking
  * PATCH /api/owner/bookings/:id/approve
  */
+export const getVenueBookings = asyncHandler(async (req: Request, res: Response) => {
+    // const { id: bookingId } = req.params;
+    const ownerId = req.user!.id;
+
+    const booking = await bookingService.ownerVenueBookings(ownerId);
+
+    logger.info('Retrieved all bookings of owner venues', {  ownerId });
+
+    res.status(HTTP_STATUS.OK).json(
+        createResponse(
+            true,
+            { booking },
+            'Bookings retrieved successfully',
+            HTTP_STATUS.OK
+        )
+    );
+});
+//  */ Approve a booking
+//  * PATCH /api/owner/bookings/:id/approve
+//  */
 export const approveBooking = asyncHandler(async (req: Request, res: Response) => {
     const { id: bookingId } = req.params;
     const ownerId = req.user!.id;

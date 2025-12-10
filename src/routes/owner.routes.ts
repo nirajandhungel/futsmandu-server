@@ -13,7 +13,8 @@ import {
   rejectBooking,
   usePlayerMode,
   useOwnerMode,
-  getOwnerVenues
+  getOwnerVenues,
+  getVenueBookings
 } from '../controllers/owner.controller.js';
 import { requireMode } from '../middleware/mode.middleware.js';
 import { UserMode, UserRole } from '../types/common.types.js';
@@ -79,11 +80,17 @@ router.post(
 );
 
 // ==================== BOOKING MANAGEMENT ====================
+router.get(
+  '/myVenueBookings',
+  requireMode([UserMode.OWNER]),
+  getVenueBookings
+);
 router.patch(
   '/bookings/:id/approve',
   requireMode([UserMode.OWNER]),
   approveBooking
 );
+
 router.patch(
   '/bookings/:id/complete',
   requireMode([UserMode.OWNER]),

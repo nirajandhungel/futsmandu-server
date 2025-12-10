@@ -25,6 +25,54 @@ export class BookingRepository extends BaseRepository<IBooking> {
     return booking ? this.toBookingDTO(booking) : null;
   }
 
+  // find bookings by ids 
+
+ async findBookingsByVenueIds(venueIds: string[], query?: BookingSearchQuery): Promise<BookingDTO[]> {
+    const filter: FilterQuery<IBooking> = {
+      venueId: { $in: venueIds }
+    };
+  
+    // Apply additional filters from query if provided
+    if (query?.status) {
+      filter.status = query.status;
+    }
+  
+    if (query?.date) {
+      const date = new Date(query.date);
+      date.setHours(0, 0, 0, 0);
+      const nextDay = new Date(date);
+      nextDay.setDate(nextDay.getDate() + 1);
+      filter.date = { $gte: date, $lt: nextDay };
+    }
+  
+    if (query?.startDate && query?.endDate) {
+      const startDate = new Date(query.startDate);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(query.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      filter.date = { $gte: startDate, $lte: endDate };
+    }
+  
+    if (query?.courtId) {
+      filter.courtId = query.courtId;
+    }
+  
+    if (query?.venueId) {
+      // Override the venueId filter if specifically provided
+      filter.venueId = query.venueId;
+    }
+  
+    if (query?.bookingType) {
+      filter.bookingType = query.bookingType;
+    }
+  
+    if (query?.groupType) {
+      filter.groupType = query.groupType;
+    }
+  
+    const bookings = await this.find(filter);
+    return bookings.map(booking => this.toBookingDTO(booking));
+  }
   /**
    * Find booking by ID with populated fields
    */
