@@ -10,8 +10,7 @@ import { uploadImageBuffer } from '../utils/cloudinary.js';
 import { config } from '../config/environment.js';
 import { OwnerVerificationStatus, UserMode, UserRole, BookingStatus } from '../types/common.types.js';
 import logger from '../utils/logger.js';
-import { getOwnerVenues } from '@/controllers/owner.controller.js';
-
+import { BookingWithDetails } from '../types/booking.types.js';
 export class OwnerService {
     private userRepository: UserRepository;
     private authService: AuthService;
@@ -362,120 +361,164 @@ export class OwnerService {
         };
     }
 
+    private getEmptyDashboardResponse() {
+    return {
+        overview: {
+            totalVenues: 0,
+            totalCourts: 0,
+            activeCourts: 0,
+            availableCourts: 0,
+            totalBookings: 0,
+            confirmedBookings: 0,
+            pendingBookings: 0,
+            completedBookings: 0
+        },
+        revenue: {
+            total: 0,
+            completed: 0,
+            last7Days: 0,
+            last30Days: 0
+        },
+        bookings: {
+            last7Days: 0,
+            last30Days: 0,
+            byStatus: {
+                pending: 0,
+                confirmed: 0,
+                completed: 0,
+                cancelled: 0
+            }
+        },
+        insights: {
+            peakHours: [],
+            bookingsPerCourt: [],
+            averageBookingValue: 0
+        }
+    };
+}
+
     /**
      * Get owner dashboard analytics
      */
     async getDashboardAnalytics(ownerId: string) {
-        // Get all venues owned by user
-        const { venues, courts } = await this.courtService.getOwnerVenues(ownerId);
-        const venueIds = venues.map(v => v.id!);
+    const { venues, courts } = await this.courtService.getOwnerVenues(ownerId);
+    const venueIds = venues.map(v => v.id!).filter(Boolean);
 
-        // Get all bookings for owner's venues
-        const allBookings = await Promise.all(
-            venueIds.map(venueId =>
-                this.bookingRepository.findBookingsByOwner(ownerId, { venueId })
-            )
-        );
-        const bookings = allBookings.flat();
-
-        // Calculate statistics
-        const totalBookings = bookings.length;
-        const confirmedBookings = bookings.filter(b => b.status === BookingStatus.CONFIRMED);
-        const pendingBookings = bookings.filter(b => b.status === BookingStatus.PENDING);
-        const completedBookings = bookings.filter(b => b.status === BookingStatus.COMPLETED);
-
-        // Calculate revenue
-        const totalRevenue = confirmedBookings.reduce((sum, b) => sum + b.totalAmount, 0);
-        const completedRevenue = completedBookings.reduce((sum, b) => sum + b.totalAmount, 0);
-
-        // Get bookings by date range (last 7 days, last 30 days)
-        const now = new Date();
-        const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-        const bookingsLast7Days = bookings.filter(b => {
-            const bookingDate = new Date(b.date);
-            return bookingDate >= last7Days;
-        });
-        const bookingsLast30Days = bookings.filter(b => {
-            const bookingDate = new Date(b.date);
-            return bookingDate >= last30Days;
-        });
-
-        const revenueLast7Days = bookingsLast7Days
-            .filter(b => b.status === BookingStatus.CONFIRMED || b.status === BookingStatus.COMPLETED)
-            .reduce((sum, b) => sum + b.totalAmount, 0);
-        const revenueLast30Days = bookingsLast30Days
-            .filter(b => b.status === BookingStatus.CONFIRMED || b.status === BookingStatus.COMPLETED)
-            .reduce((sum, b) => sum + b.totalAmount, 0);
-
-        // Calculate peak hours (group by hour)
-        const hourCounts: Record<number, number> = {};
-        confirmedBookings.forEach(booking => {
-            const [hour] = booking.startTime.split(':').map(Number);
-            hourCounts[hour] = (hourCounts[hour] || 0) + 1;
-        });
-        const peakHours = Object.entries(hourCounts)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 5)
-            .map(([hour]) => `${hour}:00`);
-
-        // Court availability insights
-        const totalCourts = courts.length;
-        const activeCourts = courts.filter(c => c.isActive).length;
-        const availableCourts = courts.filter(c => c.isAvailable).length;
-
-        // Bookings per court
-        const bookingsPerCourt = courts.map(court => {
-            const courtBookings = bookings.filter(b => b.courtId === court.id);
-            return {
-                courtId: court.id,
-                courtName: court.name,
-                totalBookings: courtBookings.length,
-                revenue: courtBookings
-                    .filter(b => b.status === BookingStatus.CONFIRMED || b.status === BookingStatus.COMPLETED)
-                    .reduce((sum, b) => sum + b.totalAmount, 0)
-            };
-        }).sort((a, b) => b.totalBookings - a.totalBookings);
-
-        logger.info('Dashboard analytics retrieved', { ownerId, totalBookings });
-
-        return {
-            overview: {
-                totalVenues: venues.length,
-                totalCourts,
-                activeCourts,
-                availableCourts,
-                totalBookings,
-                confirmedBookings: confirmedBookings.length,
-                pendingBookings: pendingBookings.length,
-                completedBookings: completedBookings.length
-            },
-            revenue: {
-                total: totalRevenue,
-                completed: completedRevenue,
-                last7Days: revenueLast7Days,
-                last30Days: revenueLast30Days
-            },
-            bookings: {
-                last7Days: bookingsLast7Days.length,
-                last30Days: bookingsLast30Days.length,
-                byStatus: {
-                    pending: pendingBookings.length,
-                    confirmed: confirmedBookings.length,
-                    completed: completedBookings.length,
-                    cancelled: bookings.filter(b => b.status === BookingStatus.CANCELLED).length
-                }
-            },
-            insights: {
-                peakHours,
-                bookingsPerCourt: bookingsPerCourt.slice(0, 10), // Top 10
-                averageBookingValue: confirmedBookings.length > 0
-                    ? totalRevenue / confirmedBookings.length
-                    : 0
-            }
-        };
+    if (venueIds.length === 0) {
+        return this.getEmptyDashboardResponse();
     }
+
+    // Get bookings - assuming findBookingsByOwner returns BookingDTO[]
+    const bookings = await this.bookingRepository.findBookingsByOwner(ownerId);
+    
+    // IMPORTANT: These are BookingDTO, not BookingWithDetails
+    // So venueId is a string, not an object
+    
+    // Remove the extra filter (it's already done in the repository)
+    const ownerBookings = bookings; // Already filtered by owner
+
+    // Use ownerBookings for ALL calculations
+    const totalBookings = ownerBookings.length;
+    const confirmedBookings = ownerBookings.filter(b => b.status === BookingStatus.CONFIRMED);
+    const pendingBookings = ownerBookings.filter(b => b.status === BookingStatus.PENDING);
+    const completedBookings = ownerBookings.filter(b => b.status === BookingStatus.COMPLETED);
+    const cancelledBookings = ownerBookings.filter(b => b.status === BookingStatus.CANCELLED);
+
+    // Calculate revenue
+    const totalRevenue = confirmedBookings.reduce((sum, b) => sum + b.totalAmount, 0);
+    const completedRevenue = completedBookings.reduce((sum, b) => sum + b.totalAmount, 0);
+
+    // Get bookings by date range
+    const now = new Date();
+    const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const bookingsLast7Days = ownerBookings.filter(b => {
+        const bookingDate = new Date(b.date);
+        return bookingDate >= last7Days;
+    });
+    
+    const bookingsLast30Days = ownerBookings.filter(b => {
+        const bookingDate = new Date(b.date);
+        return bookingDate >= last30Days;
+    });
+
+    const revenueLast7Days = bookingsLast7Days
+        .filter(b => b.status === BookingStatus.CONFIRMED || b.status === BookingStatus.COMPLETED)
+        .reduce((sum, b) => sum + b.totalAmount, 0);
+        
+    const revenueLast30Days = bookingsLast30Days
+        .filter(b => b.status === BookingStatus.CONFIRMED || b.status === BookingStatus.COMPLETED)
+        .reduce((sum, b) => sum + b.totalAmount, 0);
+
+    // Calculate peak hours
+    const hourCounts: Record<number, number> = {};
+    confirmedBookings.forEach(booking => {
+        const [hour] = booking.startTime.split(':').map(Number);
+        hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+    });
+    
+    const peakHours = Object.entries(hourCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5)
+        .map(([hour]) => `${hour}:00`);
+
+    // Court availability insights
+    const totalCourts = courts.length;
+    const activeCourts = courts.filter(c => c.isActive).length;
+    const availableCourts = courts.filter(c => c.isAvailable).length;
+
+    // Bookings per court - FIX: Use ownerBookings, not bookings
+    const bookingsPerCourt = courts.map(court => {
+        const courtBookings = ownerBookings.filter(b => b.courtId === court.id);
+        return {
+            courtId: court.id,
+            courtName: court.name,
+            totalBookings: courtBookings.length,
+            revenue: courtBookings
+                .filter(b => b.status === BookingStatus.CONFIRMED || b.status === BookingStatus.COMPLETED)
+                .reduce((sum, b) => sum + b.totalAmount, 0)
+        };
+    }).sort((a, b) => b.totalBookings - a.totalBookings);
+
+    logger.info('Dashboard analytics retrieved', { ownerId, totalBookings });
+
+    return {
+        overview: {
+            totalVenues: venues.length,
+            totalCourts,
+            activeCourts,
+            availableCourts,
+            totalBookings,
+            confirmedBookings: confirmedBookings.length,
+            pendingBookings: pendingBookings.length,
+            completedBookings: completedBookings.length
+        },
+        revenue: {
+            total: totalRevenue,
+            completed: completedRevenue,
+            last7Days: revenueLast7Days,
+            last30Days: revenueLast30Days
+        },
+        bookings: {
+            last7Days: bookingsLast7Days.length,
+            last30Days: bookingsLast30Days.length,
+            byStatus: {
+                pending: pendingBookings.length,
+                confirmed: confirmedBookings.length,
+                completed: completedBookings.length,
+                cancelled: cancelledBookings.length // Use cancelledBookings
+            }
+        },
+        insights: {
+            peakHours,
+            bookingsPerCourt: bookingsPerCourt.slice(0, 10),
+            averageBookingValue: confirmedBookings.length > 0
+                ? totalRevenue / confirmedBookings.length
+                : 0
+        }
+    };
+}
     /**
      * Get owner dashboard analytics
      */
