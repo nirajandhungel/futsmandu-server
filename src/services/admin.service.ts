@@ -11,11 +11,12 @@ import {
     AdminDashboardStats
 } from '../types/admin.types.js';
 import { NotFoundError, ValidationError } from '../middleware/error.middleware.js';
-import { OwnerVerificationStatus, UserMode, UserRole } from '../types/common.types.js';
+import { OwnerVerificationStatus, UserMode, UserRole , BookingStatus} from '../types/common.types.js';
 import { calculatePagination } from '../utils/helpers.js';
 import { APP_CONSTANTS } from '../config/constants.js';
 import { FutsalVenueModel, CourtModel } from '../models/court.model.js';
 import logger from '../utils/logger.js';
+import { Booking } from '../models/booking.model.js';
 
 export class AdminService {
     private userRepository: UserRepository;
@@ -30,46 +31,115 @@ export class AdminService {
      * Get dashboard statistics
      */
     async getDashboardStats(): Promise<AdminDashboardStats> {
-        const [
-            totalUsers,
-            totalOwners,
-            totalPlayers,
-            pendingOwnerRequests,
-            approvedOwners,
-            rejectedOwners,
-            totalVenues,
-            verifiedVenues,
-            pendingVenues,
-            activeVenues,
-            suspendedVenues
-        ] = await Promise.all([
-            this.userRepository.count({}),
-            this.userRepository.count({ role: UserRole.OWNER }),
-            this.userRepository.count({ role: UserRole.PLAYER }),
-            this.userRepository.count({ 'ownerProfile.status': OwnerVerificationStatus.PENDING }),
-            this.userRepository.count({ 'ownerProfile.status': OwnerVerificationStatus.APPROVED }),
-            this.userRepository.count({ 'ownerProfile.status': OwnerVerificationStatus.REJECTED }),
-            FutsalVenueModel.countDocuments({}),
-            FutsalVenueModel.countDocuments({ isVerified: true, isActive: true }),
-            FutsalVenueModel.countDocuments({ isVerified: false, isActive: true }),
-            FutsalVenueModel.countDocuments({ isActive: true }),
-            FutsalVenueModel.countDocuments({ isActive: false })
-        ]);
+    const [
+        totalUsers,
+        totalOwners,
+        totalPlayers,
+        pendingOwnerRequests,
+        approvedOwners,
+        rejectedOwners,
+        totalVenues,
+        verifiedVenues,
+        pendingVenues,
+        activeVenues,
+        suspendedVenues,
+        totalBookings,
+        todayBookings,
+        thisWeekBookings,
+        thisMonthBookings,
+        pendingBookings,
+        confirmedBookings,
+        cancelledBookings,
+        completedBookings
+    ] = await Promise.all([
+        this.userRepository.count({}),
+        this.userRepository.count({ role: UserRole.OWNER }),
+        this.userRepository.count({ role: UserRole.PLAYER }),
+        this.userRepository.count({ 'ownerProfile.status': OwnerVerificationStatus.PENDING }),
+        this.userRepository.count({ 'ownerProfile.status': OwnerVerificationStatus.APPROVED }),
+        this.userRepository.count({ 'ownerProfile.status': OwnerVerificationStatus.REJECTED }),
+        FutsalVenueModel.countDocuments({}),
+        FutsalVenueModel.countDocuments({ isVerified: true, isActive: true }),
+        FutsalVenueModel.countDocuments({ isVerified: false, isActive: true }),
+        FutsalVenueModel.countDocuments({ isActive: true }),
+        FutsalVenueModel.countDocuments({ isActive: false }),
+        // Booking statistics
+        Booking.countDocuments({}),
+        // Today's bookings (from start of today)
+        Booking.countDocuments({ 
+            date: { 
+                $gte: new Date(new Date().setHours(0, 0, 0, 0)),
+                $lt: new Date(new Date().setHours(23, 59, 59, 999))
+            } 
+        }),
+        // This week's bookings
+        Booking.countDocuments({ 
+            date: { 
+                $gte: new Date(new Date().setDate(new Date().getDate() - 7)),
+                $lt: new Date(new Date().setHours(23, 59, 59, 999))
+            } 
+        }),
+        // This month's bookings
+        Booking.countDocuments({ 
+            date: { 
+                $gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+                $lt: new Date(new Date().setHours(23, 59, 59, 999))
+            } 
+        }),
+        // Status-based counts
+        Booking.countDocuments({ status: BookingStatus.PENDING }),
+        Booking.countDocuments({ status: BookingStatus.CONFIRMED }),
+        Booking.countDocuments({ status: BookingStatus.CANCELLED }),
+        Booking.countDocuments({ status: BookingStatus.COMPLETED })
+    ]);
 
-        return {
-            totalUsers,
-            totalOwners,
-            totalPlayers,
-            pendingOwnerRequests,
-            approvedOwners,
-            rejectedOwners,
-            totalVenues,
-            verifiedVenues,
-            pendingVenues,
-            activeVenues,
-            suspendedVenues
-        };
-    }
+    // Calculate total revenue (from completed bookings)
+    const completedBookingsData = await Booking.find({ 
+        status: BookingStatus.COMPLETED 
+    }).select('totalAmount');
+    
+    const totalRevenue = completedBookingsData.reduce((sum, booking) => 
+        sum + (booking.totalAmount || 0), 0
+    );
+
+    // Calculate today's revenue
+    const todayCompletedBookings = await Booking.find({ 
+        status: BookingStatus.COMPLETED,
+        date: { 
+            $gte: new Date(new Date().setHours(0, 0, 0, 0)),
+            $lt: new Date(new Date().setHours(23, 59, 59, 999))
+        }
+    }).select('totalAmount');
+    
+    const todayRevenue = todayCompletedBookings.reduce((sum, booking) => 
+        sum + (booking.totalAmount || 0), 0
+    );
+
+    return {
+        totalUsers,
+        totalOwners,
+        totalPlayers,
+        pendingOwnerRequests,
+        approvedOwners,
+        rejectedOwners,
+        totalVenues,
+        verifiedVenues,
+        pendingVenues,
+        activeVenues,
+        suspendedVenues,
+        // Booking stats
+        totalBookings,
+        todayBookings,
+        thisWeekBookings,
+        thisMonthBookings,
+        pendingBookings,
+        confirmedBookings,
+        cancelledBookings,
+        completedBookings,
+        totalRevenue,
+        todayRevenue
+    };
+}
 
     /**
      * Get pending owner requests with pagination and filters

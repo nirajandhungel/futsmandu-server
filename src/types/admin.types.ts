@@ -53,5 +53,16 @@ export interface AdminDashboardStats {
     pendingVenues: number;
     activeVenues: number;
     suspendedVenues: number;
+    // Booking stats
+    totalBookings: number;
+    todayBookings: number;
+    thisWeekBookings: number;
+    thisMonthBookings: number;
+    pendingBookings: number;
+    confirmedBookings: number;
+    cancelledBookings: number;
+    completedBookings: number;
+    totalRevenue: number;
+    todayRevenue: number;
 }
 
