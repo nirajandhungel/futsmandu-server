@@ -253,6 +253,25 @@ export const getDashboard = asyncHandler(async (req: Request, res: Response) => 
         )
     );
 });
+/**
+ * Get owner dashboard analytics
+ * GET /api/owner/dashboard
+ */
+export const getOwnerVenues = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+
+    const analytics = await ownerService.getDashboardAnalytics(userId);
+    const venues = await ownerService.getOwnerVenues(userId);
+
+    res.status(HTTP_STATUS.OK).json(
+        createResponse(
+            true,
+            venues,
+            'Owner Venues retrieved successfully',
+            HTTP_STATUS.OK
+        )
+    );
+});
 
 /**
  * Approve a booking
