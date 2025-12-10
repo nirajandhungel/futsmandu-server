@@ -12,7 +12,8 @@ import {
   completeBooking,
   rejectBooking,
   usePlayerMode,
-  useOwnerMode
+  useOwnerMode,
+  getOwnerVenues
 } from '../controllers/owner.controller.js';
 import { requireMode } from '../middleware/mode.middleware.js';
 import { UserMode, UserRole } from '../types/common.types.js';
@@ -36,6 +37,8 @@ router.use(authorize(UserRole.OWNER));
 
 // Get owner profile
 router.get('/profile', getOwnerProfile);
+
+router.get('/myVenues', getOwnerVenues);
 
 // Create venue with courts (at least one 5v5 or 6v6 court required)
 // Uses FormData with simplified court structure
