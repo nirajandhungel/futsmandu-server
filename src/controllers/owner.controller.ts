@@ -337,6 +337,24 @@ export const rejectBooking = asyncHandler(async (req: Request, res: Response) =>
         )
     );
 });
+export const cancelBooking = asyncHandler(async (req: Request, res: Response) => {
+    const { id: bookingId } = req.params;
+    const userId = req.user!.id;
+    const { reason } = req.body;
+
+    const booking = await bookingService.cancelBooking(userId, bookingId, reason);
+
+    logger.info('Booking cancelled by Player', { bookingId, userId, reason });
+
+    res.status(HTTP_STATUS.OK).json(
+        createResponse(
+            true,
+            { booking },
+            'Booking cancelled successfully',
+            HTTP_STATUS.OK
+        )
+    );
+});
 
 
 //   complete a booking

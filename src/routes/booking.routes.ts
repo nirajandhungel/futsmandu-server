@@ -10,6 +10,9 @@ import {
   getBookingById,
   getJoinableBookings
 } from '../controllers/booking.controller.js';
+import { cancelBooking, rejectBooking } from '../controllers/owner.controller.js';
+import { requireMode } from '../middleware/mode.middleware.js';
+import { UserMode } from '../types/common.types.js';
 
 const router = Router();
 
@@ -42,6 +45,12 @@ router.post('/:id/invite', invitePlayers);
 
 // Get booking by ID
 router.get('/:id', getBookingById);
+
+router.patch(
+  '/bookings/:id/cancel',
+  requireMode([UserMode.PLAYER]),
+  cancelBooking
+);
 
 export default router;
 

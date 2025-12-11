@@ -819,6 +819,43 @@ export class BookingService {
     // Update booking
     await this.bookingRepository.updateBookingById(bookingId, {
       ownerApproved: false,
+      status: BookingStatus.REJECTED,
+      cancelledAt: new Date(),
+      cancelledBy: ownerId,
+      cancellationReason: reason || 'Rejected by owner'
+    });
+
+    // Notify all players
+    const updatedBooking = await this.getBookingWithDetails(bookingId);
+    for (const player of updatedBooking.players) {
+      if (player.status === 'active') {
+        await this.notificationService.createNotification({
+          userId: player.userId,
+          type: NotificationType.BOOKING_REJECTED,
+          title: 'Booking Rejected',
+          message: reason || 'Your booking has been rejected by the owner.',
+          relatedBookingId: bookingId
+        });
+      }
+    }
+
+    logger.info('Booking rejected by owner', { bookingId, ownerId, reason });
+
+    return updatedBooking;
+  }
+  async cancelBooking(ownerId: string, bookingId: string, reason?: string): Promise<BookingWithDetails> {
+    const booking = await this.bookingRepository.findBookingById(bookingId);
+    if (!booking) {
+      throw new NotFoundError(
+        ERROR_MESSAGES[ERROR_CODES.BOOKING_NOT_FOUND],
+        ERROR_CODES.BOOKING_NOT_FOUND,
+        { bookingId }
+      );
+    }
+
+    // Update booking
+    await this.bookingRepository.updateBookingById(bookingId, {
+      ownerApproved: false,
       status: BookingStatus.CANCELLED,
       cancelledAt: new Date(),
       cancelledBy: ownerId,
@@ -833,13 +870,13 @@ export class BookingService {
           userId: player.userId,
           type: NotificationType.BOOKING_CANCELLED,
           title: 'Booking Cancelled',
-          message: reason || 'Your booking has been cancelled by the owner.',
+          message: reason || 'Your booking has been cancelled by the player.',
           relatedBookingId: bookingId
         });
       }
     }
 
-    logger.info('Booking rejected by owner', { bookingId, ownerId, reason });
+    logger.info('Booking cancelled by player', { bookingId, ownerId, reason });
 
     return updatedBooking;
   }
