@@ -47,7 +47,7 @@ router.post('/:id/invite', invitePlayers);
 router.get('/:id', getBookingById);
 
 router.patch(
-  '/bookings/:id/cancel',
+  '/:id/cancel',
   requireMode([UserMode.PLAYER]),
   cancelBooking
 );
